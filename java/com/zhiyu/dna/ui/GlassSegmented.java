@@ -33,7 +33,8 @@ public class GlassSegmented extends LinearLayout {
     public interface OnDragListener { void onDrag(float pos); }
 
     private static final float MAX_SEG_DP = 88f;      // 内容需要的段宽上限
-    private static final float MAX_SEG_HARD_DP = 150f; // 大屏放大后的单段硬上限
+    private static final float MAX_SEG_HARD_DP = 128f; // 手机放大后的单段硬上限
+    private static final float MAX_SEG_LARGE_DP = 112f; // 平板/大屏单段硬上限(更短, 长标签仍够用)
     private static final float DRAG_SLOP_DP = 4f;
 
     private final String[] items;
@@ -171,7 +172,7 @@ public class GlassSegmented extends LinearLayout {
             }
         }
         float need = maxText + dp(30);                     // 左右各 15dp
-        float lo = dp(88);                                 // 下限: 顶栏保持舒展
+        float lo = dp(82);                                 // 下限: 顶栏舒展但不冗长
         float hi = dp(124);
         if (need < lo) need = lo;
         if (need > hi) need = hi;
@@ -181,17 +182,21 @@ public class GlassSegmented extends LinearLayout {
     /**
      * 面板宽度:
      *  1. 至少满足内容所需(长标签不被裁)
-     *  2. 大屏时按屏宽比例放大(避免在平板/横屏上缩成中间一小条)
-     *  3. 单段不超过 {@link #MAX_SEG_HARD_DP}dp, 且整体不超屏宽
+     *  2. 手机(<600dp)按屏宽比例略微铺开; 平板/大屏以内容为准, 不被屏宽拉长
+     *  3. 单段不超过硬上限, 且整体不超屏宽
      */
     public float getPanelWidth() {
         int n = Math.max(1, items.length);
         float need = contentSegWidth() * n;
         float avail = getWidth();
         if (avail <= 0) return need;
-        float byScreen = avail * 0.62f;                    // 大屏按屏宽 62% 铺开
-        float pw = Math.max(need, byScreen);
-        float segCap = dp(150);                            // 单段硬上限
+
+        float density = getResources().getDisplayMetrics().density;
+        boolean large = avail / density >= 600f;           // 平板 / 大屏判定
+        float frac = large ? 0.30f : 0.52f;                 // 大屏只留 30%, 不再拖长
+        float segCap = dp(large ? MAX_SEG_LARGE_DP : MAX_SEG_HARD_DP);
+
+        float pw = Math.max(need, avail * frac);
         if (pw / n > segCap) pw = segCap * n;
         if (pw > avail) pw = avail;
         return pw;

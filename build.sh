@@ -101,8 +101,15 @@ def measure(path):
     return res
 
 
+def pad_ok(p):
+    """padding 为 0 或 >=4(extra 字段有效)"""
+    if p and p < 4:
+        p += ALIGN
+    return p
+
+
 def build(pads):
-    """pads: {档案名: 额外padding字节数}; 第一遍全 0"""
+    """pads: {档案名: 实际padding字节数}; 缺省用最小字节对齐 padding"""
     with zipfile.ZipFile(base, 'r') as zin, \
          zipfile.ZipFile(unsigned, 'w', zipfile.ZIP_DEFLATED) as zout:
         for info in zin.infolist():
@@ -115,9 +122,10 @@ def build(pads):
         zout.writestr(d, dex_data)
         for arc, data in libs:
             nm = arc.encode('utf-8')
-            pad = pads.get(arc, 0) or (ALIGN - (len(nm)) % ALIGN) % ALIGN
-            if pad and pad < 4:
-                pad += ALIGN
+            pad = pads.get(arc)
+            if pad is None:
+                pad = (ALIGN - (len(nm)) % ALIGN) % ALIGN
+            pad = pad_ok(pad)
             zi = zipfile.ZipInfo(arc)
             zi.compress_type = zipfile.ZIP_STORED
             zi.external_attr = 0o644 << 16
@@ -125,23 +133,25 @@ def build(pads):
             zout.writestr(zi, data)
 
 
-# 第一遍: 粗对齐
-build({})
-pos = measure(unsigned)
+# 迭代对齐: 每轮实测真实偏移后修正; 修正某个库会推移其后的库, 故循环至收敛
 pads = {}
 for arc, data in libs:
-    need = (ALIGN - (pos[arc] % ALIGN)) % ALIGN
     nm = arc.encode('utf-8')
-    base_pad = (ALIGN - (len(nm)) % ALIGN) % ALIGN
-    if base_pad and base_pad < 4:
-        base_pad += ALIGN
-    pads[arc] = base_pad + need
-    if pads[arc] and pads[arc] < 4:
-        pads[arc] += ALIGN
+    pads[arc] = (ALIGN - (len(nm)) % ALIGN) % ALIGN
 
-# 第二遍: 按实测误差修正
-build(pads)
-pos = measure(unsigned)
+pos = {}
+for _ in range(8):
+    build(pads)
+    pos = measure(unsigned)
+    settled = True
+    for arc, data in libs:
+        need = (ALIGN - (pos[arc] % ALIGN)) % ALIGN
+        if need:
+            settled = False
+            pads[arc] = pad_ok(pads[arc] + need)
+    if settled:
+        break
+
 ok = True
 for arc, data in libs:
     good = pos[arc] % ALIGN == 0
@@ -159,8 +169,8 @@ if [ ! -f "$KSTORE" ]; then
         -dname "CN=DNA Unpacker, OU=DNA, O=zhiyu, C=CN" 2>/dev/null
 fi
 apksigner sign --ks "$KSTORE" --ks-pass "pass:$KSPASS" \
-    --out "$OUT/DNA-No-ROOT-V3.0.apk" "$OUT/unsigned.apk"
+    --out "$OUT/DNA-No-ROOT-V3.0.1.apk" "$OUT/unsigned.apk"
 
 echo ""
-echo "APK: $OUT/DNA-No-ROOT-V3.0.apk"
-ls -lh "$OUT/DNA-No-ROOT-V3.0.apk"
+echo "APK: $OUT/DNA-No-ROOT-V3.0.1.apk"
+ls -lh "$OUT/DNA-No-ROOT-V3.0.1.apk"
