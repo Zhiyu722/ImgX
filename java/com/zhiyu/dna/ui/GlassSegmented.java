@@ -32,7 +32,8 @@ public class GlassSegmented extends LinearLayout {
     public interface OnSelectedListener { void onSelected(int index); }
     public interface OnDragListener { void onDrag(float pos); }
 
-    private static final float MAX_SEG_DP = 88f;   // 更紧凑的外框(手机上不再占满整宽)
+    private static final float MAX_SEG_DP = 88f;      // 内容需要的段宽上限
+    private static final float MAX_SEG_HARD_DP = 150f; // 大屏放大后的单段硬上限
     private static final float DRAG_SLOP_DP = 4f;
 
     private final String[] items;
@@ -177,12 +178,22 @@ public class GlassSegmented extends LinearLayout {
         return need;
     }
 
-    /** 面板宽度: 按内容自适应(长标签如"sparse 镜像"不再被裁), 超屏则占满 */
+    /**
+     * 面板宽度:
+     *  1. 至少满足内容所需(长标签不被裁)
+     *  2. 大屏时按屏宽比例放大(避免在平板/横屏上缩成中间一小条)
+     *  3. 单段不超过 {@link #MAX_SEG_HARD_DP}dp, 且整体不超屏宽
+     */
     public float getPanelWidth() {
-        float seg = contentSegWidth();
-        float pw = seg * Math.max(1, items.length);
+        int n = Math.max(1, items.length);
+        float need = contentSegWidth() * n;
         float avail = getWidth();
-        if (avail > 0 && pw > avail) pw = avail;
+        if (avail <= 0) return need;
+        float byScreen = avail * 0.62f;                    // 大屏按屏宽 62% 铺开
+        float pw = Math.max(need, byScreen);
+        float segCap = dp(150);                            // 单段硬上限
+        if (pw / n > segCap) pw = segCap * n;
+        if (pw > avail) pw = avail;
         return pw;
     }
 

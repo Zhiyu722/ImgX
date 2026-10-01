@@ -166,13 +166,11 @@ public class MainActivity extends Activity {
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.TOP);
         topLp.topMargin = (int) (dp(8) + statusBarHeight());
-        // 分辨率适配: 大屏时顶栏也限制宽度并居中
+        // 分辨率适配: 整屏铺满, 只按屏宽比例留一点边(不再硬性限宽居中)
         int screenW = getResources().getDisplayMetrics().widthPixels;
-        int maxContentW = (int) (560 * getResources().getDisplayMetrics().density);
-        if (screenW > maxContentW) {
-            int sidePad = (screenW - maxContentW) / 2;
-            topArea.setPadding(sidePad + (int) dp(18), 0, sidePad + (int) dp(18), 0);
-        }
+        float dpWidth = screenW / density;
+        int sidePad = adaptiveSidePadding(dpWidth);
+        topArea.setPadding(sidePad, 0, sidePad, 0);
         root.addView(topArea, topLp);
 
         // 分页器
@@ -457,17 +455,28 @@ public class MainActivity extends Activity {
         return c;
     }
 
+    /**
+     * 自适应左右留边(px): 铺满整屏, 只按屏宽留一点点边。
+     *  手机(<600dp): 20dp(与原观感一致)
+     *  大屏: 屏宽的 4%, 上限 40dp —— 不再把内容挤成中间一条
+     */
+    private int adaptiveSidePadding(float dpWidth) {
+        float marginDp;
+        if (dpWidth < 600f) marginDp = 20f;
+        else marginDp = Math.min(40f, dpWidth * 0.04f);
+        return (int) dp(marginDp);
+    }
+
     private View scrollWrap(View content) {
         ScrollView sv = new ScrollView(this);
         sv.setFillViewport(true);
         sv.setClipToPadding(false);
-        // 分辨率适配: 大屏(平板/横屏)限制内容宽度并居中, 避免元素被拉伸变形
+        // 分辨率适配: 内容铺满整屏宽度(仅按屏宽比例留边), 不在大屏上居中限宽
         int screenW = getResources().getDisplayMetrics().widthPixels;
         float density = getResources().getDisplayMetrics().density;
-        int maxW = (int) (560 * density); // 内容最大宽度 560dp
-        if (screenW > maxW) {
+        int sidePad = adaptiveSidePadding(screenW / density) - (int) dp(20);
+        if (sidePad > 0) {
             FrameLayout wrap = new FrameLayout(this);
-            int sidePad = (screenW - maxW) / 2;
             wrap.setPadding(sidePad, 0, sidePad, 0);
             wrap.addView(content, new FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT));
