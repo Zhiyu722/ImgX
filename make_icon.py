@@ -1,27 +1,30 @@
 #!/usr/bin/env python3
-"""ImgX 应用图标生成器(简约版): 品牌蓝柔和渐变底 + 纯白粗圆头 X + 克制微高光。
-规范见 ~/.dsh/skills/app-icon-design/SKILL.md。输出 5 档密度(res/mipmap-*-v4/ic_launcher.png)。"""
+"""ImgX 图标生成器(液态玻璃拟物): 深空蓝黑底 + 悬浮 3D 玻璃 X。
+玻璃=白→浅蓝渐变主体 + 上沿镜面高光 + 下沿反光边 + 外缘亮描边 + 背后光晕 + 轻投影。
+输出 5 档密度 res/mipmap-*-v4/ic_launcher.png。"""
 from PIL import Image, ImageDraw, ImageFilter
 import math, os
 
-# 参数(调这里即可换风格)
-BG_TOP   = (62, 155, 255)   # 左上亮蓝
-BG_BOTTOM= (21, 100, 232)   # 右下深一档的蓝(同一色相)
-X_COLOR  = (255, 255, 255, 255)
-X_W      = 0.185             # X 条宽(画布比例)
-X_L      = 0.565             # X 条长(画布比例, 留白充足)
-SHADOW   = (20, 40, 90, 58)  # 轻投影颜色/透明度
-GLOSS_A  = 56                # 顶部玻璃高光透明度
+BG_A, BG_B   = (17, 23, 55), (7, 9, 26)     # 深空对角渐变
+HALO         = (70, 120, 235, 64)            # 背后光晕
+GLASS_TOP    = (252, 254, 255)               # 玻璃上端(近白)
+GLASS_BOTTOM = (168, 196, 238)               # 玻璃下端(浅蓝)
+EDGE         = (235, 245, 255, 150)          # 外缘亮描边
+HIGHLIGHT    = (255, 255, 255, 175)          # 上沿镜面高光
+REFLECT      = (36, 58, 122, 120)            # 下沿反光边
+SHADOW       = (0, 2, 12, 95)                # 投影
+X_W, X_L     = 0.195, 0.58                   # 玻璃臂宽/长(画布比例)
 
 def make_icon(S):
     SS = S * 4
     img = Image.new("RGBA", (SS, SS), (0, 0, 0, 0))
     px = img.load()
-    # 柔和对角渐变(垂直方向渐变更稳, 带 10% 水平偏移模拟光从左上打来)
+    # 深空底(对角, 左下略亮)
     for y in range(SS):
         for x in range(SS):
-            t = (y / SS) * 0.9 + (x / SS) * 0.1
-            px[x, y] = tuple(int(BG_TOP[i] + (BG_BOTTOM[i] - BG_TOP[i]) * t) for i in range(3)) + (255,)
+            t = (x + y) / (2.0 * SS)
+            px[x, y] = tuple(int(BG_A[i] + (BG_B[i] - BG_A[i]) * t) for i in range(3)) + (255,)
+    img = img.filter(ImageFilter.GaussianBlur(SS * 0.012))
     d = ImageDraw.Draw(img, "RGBA")
 
     cx = cy = SS * 0.5
@@ -36,39 +39,76 @@ def make_icon(S):
 
     def draw_bar(dd, p0, p1, width, color):
         dd.line([p0, p1], fill=color, width=int(width))
-        rr = width/2
+        rr = width / 2
         dd.ellipse([p0[0]-rr, p0[1]-rr, p0[0]+rr, p0[1]+rr], fill=color)
         dd.ellipse([p1[0]-rr, p1[1]-rr, p1[0]+rr, p1[1]+rr], fill=color)
 
-    # 轻投影(先画, 贴一点, 小模糊)
+    # 背后光晕(大半径柔和)
+    halo = Image.new("RGBA", (SS, SS), (0, 0, 0, 0))
+    hd = ImageDraw.Draw(halo, "RGBA")
+    hd.ellipse([SS*0.14, SS*0.18, SS*0.86, SS*0.82], fill=HALO)
+    halo = halo.filter(ImageFilter.GaussianBlur(SS * 0.12))
+    img.alpha_composite(halo)
+
+    # 轻投影
     sh = Image.new("RGBA", (SS, SS), (0, 0, 0, 0))
     sd = ImageDraw.Draw(sh, "RGBA")
     for ang in (45, -45):
         p0, p1 = bar_pts(ang)
-        draw_bar(sd, (p0[0], p0[1] + SS*0.010), (p1[0], p1[1] + SS*0.010), W, SHADOW)
-    sh = sh.filter(ImageFilter.GaussianBlur(SS * 0.006))
+        draw_bar(sd, (p0[0], p0[1]+SS*0.012), (p1[0], p1[1]+SS*0.012), W, SHADOW)
+    sh = sh.filter(ImageFilter.GaussianBlur(SS * 0.008))
     img.alpha_composite(sh)
 
-    # 纯白 X
+    # 外缘亮描边(先画, 被主体盖住 2px 形成玻璃亮边)
+    edge = Image.new("RGBA", (SS, SS), (0, 0, 0, 0))
+    ed = ImageDraw.Draw(edge, "RGBA")
     for ang in (45, -45):
         p0, p1 = bar_pts(ang)
-        draw_bar(d, p0, p1, W, X_COLOR)
+        draw_bar(ed, p0, p1, W + SS*0.018, EDGE)
+    img.alpha_composite(edge)
 
-    # 克制高光: 每条臂上沿一条半透明白(玻璃反光)
-    gloss = Image.new("RGBA", (SS, SS), (0, 0, 0, 0))
-    gd = ImageDraw.Draw(gloss, "RGBA")
+    # 玻璃主体: 沿臂从近白渐变到浅蓝; 交叉处两臂自然叠加
     for ang in (45, -45):
-        a = math.radians(ang)
         p0, p1 = bar_pts(ang)
-        per = (math.cos(a + math.pi/2), math.sin(a + math.pi/2))  # 朝向"上"一侧
-        # 取垂直于臂、指向右上方的偏移(两条臂都取同一"天顶"方向的高光)
-        up = (0, -1)
-        off = W * 0.30 * up[0]
-        # 简化: 沿臂方向在中心线偏上 W*0.30 处画细条
-        ox, oy = up[0] * W * 0.30, up[1] * W * 0.30
-        draw_bar(gd, (p0[0]+ox, p0[1]+oy), (p1[0]+ox, p1[1]+oy), W * 0.38, (255, 255, 255, GLOSS_A))
-    gloss = gloss.filter(ImageFilter.GaussianBlur(SS * 0.004))
-    img.alpha_composite(gloss)
+        ux, uy = (p1[0]-p0[0])/L, (p1[1]-p0[1])/L
+        mask = Image.new("L", (SS, SS), 0)
+        md = ImageDraw.Draw(mask)
+        md.line([p0, p1], fill=255, width=int(W))
+        md.ellipse([p0[0]-r, p0[1]-r, p0[0]+r, p0[1]+r], fill=255)
+        md.ellipse([p1[0]-r, p1[1]-r, p1[0]+r, p1[1]+r], fill=255)
+        for y in range(SS):
+            for x in range(SS):
+                if mask.getpixel((x, y)) > 0:
+                    t = ((x-p0[0])*ux + (y-p0[1])*uy) / L
+                    t = max(0.0, min(1.0, t))
+                    col = tuple(int(GLASS_TOP[i] + (GLASS_BOTTOM[i] - GLASS_TOP[i]) * t) for i in range(3))
+                    img.putpixel((x, y), col + (255,))
+    # 上沿镜面高光 + 下沿反光边(逐臂)
+    for ang in (45, -45):
+        p0, p1 = bar_pts(ang)
+        a = math.radians(ang)
+        ux, uy = math.cos(a), math.sin(a)
+        nx, ny = uy, -ux          # 法线
+        # 高光条: 朝上方偏移
+        hl = Image.new("RGBA", (SS, SS), (0, 0, 0, 0))
+        hld = ImageDraw.Draw(hl, "RGBA")
+        ox, oy = 0, -W * 0.30
+        draw_bar(hld, (p0[0]+ox, p0[1]+oy), (p1[0]+ox, p1[1]+oy), W * 0.34, HIGHLIGHT)
+        hl = hl.filter(ImageFilter.GaussianBlur(SS * 0.003))
+        img.alpha_composite(hl)
+        # 下沿反光边
+        rl = Image.new("RGBA", (SS, SS), (0, 0, 0, 0))
+        rld = ImageDraw.Draw(rl, "RGBA")
+        ox2, oy2 = 0, W * 0.26
+        draw_bar(rld, (p0[0]+ox2, p0[1]+oy2), (p1[0]+ox2, p1[1]+oy2), W * 0.16, REFLECT)
+        rl = rl.filter(ImageFilter.GaussianBlur(SS * 0.002))
+        img.alpha_composite(rl)
+    # 中心亮核(交叉聚焦)
+    core = Image.new("RGBA", (SS, SS), (0, 0, 0, 0))
+    cdd = ImageDraw.Draw(core, "RGBA")
+    cdd.ellipse([cx-W*0.28, cy-W*0.28, cx+W*0.28, cy+W*0.28], fill=(255, 255, 255, 200))
+    core = core.filter(ImageFilter.GaussianBlur(SS * 0.004))
+    img.alpha_composite(core)
 
     return img.resize((S, S), Image.LANCZOS)
 
