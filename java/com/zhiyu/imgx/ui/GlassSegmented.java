@@ -60,6 +60,7 @@ public class GlassSegmented extends LinearLayout {
     private float dragStartPos;
     private boolean dragging;
     private boolean pressed;
+    private boolean instantMode;   // 即时模式: 点选即停, 不跑玻璃弹簧动画(用于卡片内单选, 避免每帧重绘闪烁)
 
     public GlassSegmented(Context context, String[] items) {
         super(context);
@@ -105,7 +106,14 @@ public class GlassSegmented extends LinearLayout {
 
     public void setOnSelectedListener(OnSelectedListener l) { this.listener = l; }
     public void setOnDragListener(OnDragListener l) { this.dragListener = l; }
-    public void attachScene(GlassScene s) { this.scene = s; }
+    public void setInstantMode(boolean v) { this.instantMode = v; }
+    public void attachScene(GlassScene s) {
+        if (this.scene == s) return;
+        if (this.scene != null) this.scene.detachGlassView(this);
+        this.scene = s;
+        if (s != null) s.attachGlassView(this);
+        invalidate();
+    }
     public int getSelectedIndex() { return selected; }
     public float getPageCount() { return items.length; }
     public float getCurrentPos() { return pillPos; }
@@ -143,6 +151,15 @@ public class GlassSegmented extends LinearLayout {
         boolean changed = index != selected;
         selected = index;
         targetPos = index;
+        if (instantMode) {   // 即时模式: 点选即停, 无玻璃弹簧动画(卡片内单选不闪)
+            stopSpring();
+            pillPos = index;
+            pillVel = 0;
+            updateTextColors();
+            invalidate();
+            if (changed && listener != null) listener.onSelected(index);
+            return;
+        }
         // 点击立即起跳(不等分页器回流), 观感零延迟
         stopSpring();
         lastStep = System.nanoTime();
@@ -231,11 +248,21 @@ public class GlassSegmented extends LinearLayout {
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
-        int side = (int) getPanelLeft();
-        if (getPaddingLeft() != side || getPaddingRight() != side) {
-            setPadding(side, getPaddingTop(), side, getPaddingBottom());
-        }
-        fitTextSize();
+        // 延迟到布局稳定后一次性设置面板边距/字号: 启动布局阶段宽度渐进变化,
+        // 若每次 onSizeChanged 立即 setPadding 会让文字/胶囊左右跳动错位。
+        post(() -> {
+            int side = (int) getPanelLeft();
+            if (getPaddingLeft() != side || getPaddingRight() != side) {
+                setPadding(side, getPaddingTop(), side, getPaddingBottom());
+            }
+            fitTextSize();
+        });
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        if (scene != null) scene.detachGlassView(this);
+        super.onDetachedFromWindow();
     }
 
     public float getSegmentWidth() {
@@ -356,7 +383,7 @@ public class GlassSegmented extends LinearLayout {
         lastStep = now;
         if (dt <= 0) return;
         float x = pillPos - targetPos;
-        float omega = 26f;    // 点击/回位更快, 拖沓感消除
+        float omega = 32f;    // 点击/回位更快, 拖沓感消除
         float zeta = 0.99f;   // 近临界阻尼: 到位即停, 不回弹过头
         float accel = -omega * omega * x - 2f * zeta * omega * pillVel;
         pillVel += accel * dt;

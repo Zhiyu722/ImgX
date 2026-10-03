@@ -24,9 +24,9 @@ public class GlassPager extends ViewGroup {
         void onPageChanged(int index, float position);
     }
 
-    // iOS 手感: 点击干脆(≈0.25s), 滑动松手从容(≈0.38s), 都是临界阻尼(不回弹)
-    private static final double K_SWIPE = 300.0;   // 滑动松手: 更快到位(原先 140)
-    private static final double K_CLICK = 760.0;   // 点击切页: 更快响应(原先 620)
+    // 手感: 点击干脆(≈0.2s), 滑动松手从容(≈0.32s), 都是临界阻尼(不回弹)
+    private static final double K_SWIPE = 430.0;   // 滑动松手: 更快到位(原先 300)
+    private static final double K_CLICK = 1050.0;  // 点击切页: 更快响应(原先 760)
     private static final double SPRING_DAMPING = 0.99;
     /** 当前生效的刚度(按交互类型切换) */
     private double activeK = K_CLICK;
@@ -199,6 +199,9 @@ public class GlassPager extends ViewGroup {
         for (int i = 0; i < pages.size(); i++) {
             View v = pages.get(i);
             if (v == null || v.getVisibility() != View.VISIBLE) continue;
+            // 只绘制可见页(当前 + 相邻): 远的页跳过, 滑动不掉帧(原来每帧画全部 3 页)
+            float pageOffset = (float) (posX - i * width);
+            if (pageOffset < -width || pageOffset > width) continue;
             canvas.save();
             canvas.clipRect(i * width, 0, (i + 1) * width, getHeight());
             drawChild(canvas, v, t);
@@ -276,10 +279,20 @@ public class GlassPager extends ViewGroup {
                 stopSpring();
                 velocityTracker.reset();
                 velocityTracker.addPosition(System.currentTimeMillis(), posX);
+                downX = ev.getX();
+                downY = ev.getY();
+                touchLocked = false;
                 lastX = ev.getX();
                 return true;
             case MotionEvent.ACTION_MOVE: {
                 float x = ev.getX();
+                float dx = x - downX;
+                float dy = ev.getY() - downY;
+                // 垂直手势(上下滑动内容): 本层不动, 不翻页不误判(解决"上下滑有问题")
+                if (!dragging && Math.abs(dy) > touchSlop && Math.abs(dy) > Math.abs(dx) * 1.2f) {
+                    touchLocked = true;
+                }
+                if (touchLocked) return true;
                 if (lastX < 0) lastX = x;
                 double delta = lastX - x;
                 lastX = x;
@@ -296,6 +309,15 @@ public class GlassPager extends ViewGroup {
             }
             case MotionEvent.ACTION_UP: {
                 lastX = -1f;
+                if (touchLocked) {   // 垂直手势结束: 归位当前页, 不翻页
+                    touchLocked = false;
+                    dragging = false;
+                    posX = Math.round(posX / Math.max(1, width)) * width;
+                    posVel = 0;
+                    applyScroll();
+                    notifyChanged();
+                    return true;
+                }
                 dragging = false;
                 touchLocked = false;
                 double v = velocityTracker.calculateVelocity(100);
@@ -305,9 +327,9 @@ public class GlassPager extends ViewGroup {
                 // 就近页(拖过 50% 即翻页)
                 int target = (int) Math.round(posF);
                 // 速度方向: 手指向左滑(posX 增大)速度为正 → 下一页; 向右滑为负 → 上一页
-                if (v > 380) {
+                if (v > 340) {
                     target = (int) Math.floor(posF) + 1;   // 向左甩 → 下一页
-                } else if (v < -380) {
+                } else if (v < -340) {
                     target = (int) Math.ceil(posF) - 1;    // 向右甩 → 上一页
                 }
                 target = Math.max(0, Math.min(target, pages.size() - 1));

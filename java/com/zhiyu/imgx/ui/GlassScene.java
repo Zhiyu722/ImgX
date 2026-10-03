@@ -17,6 +17,7 @@ public class GlassScene extends FrameLayout {
     private long lastCapture;
     private final Object lock = new Object();
     private final Runnable captureTask = this::capture;
+    private final java.util.List<android.view.View> glassViews = new java.util.ArrayList<>();
 
     public GlassScene(Context context) {
         super(context);
@@ -29,9 +30,28 @@ public class GlassScene extends FrameLayout {
         return bg;
     }
 
+    /** 玻璃视图注册: 捕获完成后自动重绘, 保证玻璃背景不错位不滞后 */
+    public void attachGlassView(android.view.View v) {
+        synchronized (glassViews) {
+            if (!glassViews.contains(v)) glassViews.add(v);
+        }
+    }
+
+    public void detachGlassView(android.view.View v) {
+        synchronized (glassViews) {
+            glassViews.remove(v);
+        }
+    }
+
     /** 请求一帧背景捕获(由动画驱动调用) —— 降频防大屏卡死 */
     public void requestCapture() {
         postDelayed(captureTask, 250); // ~4fps, 大屏(平板)也不会卡主线程
+    }
+
+    @Override
+    protected void onLayout(boolean changed, int l, int t, int r, int b) {
+        super.onLayout(changed, l, t, r, b);
+        if (changed) post(() -> capture());   // 布局稳定后立即捕获一次, 玻璃背景立即可用
     }
 
     private void capture() {
@@ -52,6 +72,8 @@ public class GlassScene extends FrameLayout {
                 bg.drawTo(c);
                 cacheVersion++;
             }
+            // 捕获完成: 不主动 invalidate 玻璃视图 —— 主动刷新会触发每帧全树重绘,
+            // 低端机上上下滑动直接卡死; 玻璃视图在自身交互/布局时自然用最新缓存即可。
         } catch (Throwable t) {
             // 大屏/低内存设备: 捕获失败就跳过, 不崩溃
             android.util.Log.i("ImgX", "capture failed", t);

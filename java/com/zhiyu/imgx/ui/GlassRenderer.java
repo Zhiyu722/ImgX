@@ -30,6 +30,17 @@ public final class GlassRenderer {
 
     private GlassRenderer() {}
 
+    // 复用的绘制画笔(主线程串行绘制, 安全): 避免每帧 onDraw 重复分配对象导致卡顿
+    private static final Paint P_REFRACT = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private static final Paint P_EDGE = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private static final Paint P_TINT = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private static final Paint P_BASE = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private static final Paint P_SPEC = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private static final Paint P_LINE = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private static final Paint P_SHEEN = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private static final Paint P_INNER = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private static final Paint P_RIM = new Paint(Paint.ANTI_ALIAS_FLAG);
+
     /** 兼容旧调用: 默认罩白 + 默认折射 */
     public static void drawGlass(Canvas canvas, GlassScene scene, View self,
                                  RectF rect, float radius, Paint shadowPaint) {
@@ -82,13 +93,13 @@ public final class GlassRenderer {
                 return;
             }
         }
-        drawJava(canvas, scene, self, rect, radius, tintAlpha, refraction, specular, shadowPaint);
+        drawJava(canvas, scene, self, rect, radius, tintAlpha, refraction, specular, live, shadowPaint);
     }
 
     /** Java Canvas 实现(原生不可用时的回退, 也是参考实现) */
     private static void drawJava(Canvas canvas, GlassScene scene, View self,
                                  RectF rect, float radius, int tintAlpha,
-                                 float refraction, float specular, Paint shadowPaint) {
+                                 float refraction, float specular, boolean live, Paint shadowPaint) {
         final Path shape = new Path();
         shape.addRoundRect(rect, radius, radius, Path.Direction.CW);
 
@@ -131,16 +142,17 @@ public final class GlassRenderer {
 
             // 中心轻微放大: 玻璃"厚度"的基础折射
             float k = 1.0f + 0.055f * refraction;
-            Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+            Paint p = P_REFRACT;
             p.setFilterBitmap(true);
             p.setColorFilter(vibrancyFilter());
             canvas.drawBitmap(cache, src,
                     new RectF(cx - hw * k, cy - hh * k, cx + hw * k, cy + hh * k), p);
 
             // 贴边环带额外弯折: 越靠边越明显
+            // live=false(静态卡片/滚动过渡): 跳过环带, 每帧只做基础采样, 滑动不掉帧
             float band = Math.min(rect.width(), rect.height()) * 0.22f;
-            if (band > 4f && refraction > 0f) {
-                Paint edgeP = new Paint(Paint.ANTI_ALIAS_FLAG);
+            if (band > 4f && refraction > 0f && live) {
+                Paint edgeP = P_EDGE;
                 edgeP.setFilterBitmap(true);
                 float k2 = 1.0f + 0.16f * refraction;
                 for (int i = 0; i < 3; i++) {
@@ -167,17 +179,17 @@ public final class GlassRenderer {
             }
 
             // ---------- 4. 罩白 ----------
-            Paint tintP = new Paint(Paint.ANTI_ALIAS_FLAG);
+            Paint tintP = P_TINT;
             tintP.setColor(Color.argb(Math.max(0, Math.min(255, tintAlpha)), 255, 255, 255));
             canvas.drawRect(rect, tintP);
         } else {
-            Paint base = new Paint(Paint.ANTI_ALIAS_FLAG);
+            Paint base = P_BASE;
             base.setColor(Color.argb(Math.min(255, tintAlpha + 40), 255, 255, 255));
             canvas.drawRect(rect, base);
         }
 
         // ---------- 5. 顶部镜面高光 ----------
-        Paint spec = new Paint(Paint.ANTI_ALIAS_FLAG);
+        Paint spec = P_SPEC;
         int s1 = argbScale(0xB8, specular);
         int s2 = argbScale(0x4A, specular);
         spec.setShader(new LinearGradient(0, rect.top, 0, rect.top + h * 0.62f,
@@ -186,7 +198,7 @@ public final class GlassRenderer {
         canvas.drawRect(rect.left, rect.top, rect.right, rect.top + h * 0.62f, spec);
 
         // 上缘细亮线(最强高光)
-        Paint line = new Paint(Paint.ANTI_ALIAS_FLAG);
+        Paint line = P_LINE;
         line.setStrokeCap(Paint.Cap.ROUND);
         line.setStrokeWidth(Math.max(1.4f, h * 0.028f));
         line.setColor(argbScale(0xE8, specular) << 24 | 0x00FFFFFF);
@@ -195,14 +207,14 @@ public final class GlassRenderer {
         canvas.drawLine(rect.left + pad2, ly, rect.right - pad2, ly, line);
 
         // ---------- 6. 斜向光泽 ----------
-        Paint sheen = new Paint(Paint.ANTI_ALIAS_FLAG);
+        Paint sheen = P_SHEEN;
         sheen.setShader(new LinearGradient(rect.left, rect.top, rect.right, rect.bottom,
                 new int[]{0x00FFFFFF, 0x22FFFFFF, 0x00FFFFFF},
                 new float[]{0.28f, 0.52f, 0.76f}, Shader.TileMode.CLAMP));
         canvas.drawRect(rect, sheen);
 
         // ---------- 7. 边缘内阴影(厚度感, 下缘更重) ----------
-        Paint innerP = new Paint(Paint.ANTI_ALIAS_FLAG);
+        Paint innerP = P_INNER;
         innerP.setShader(new LinearGradient(0, rect.top, 0, rect.bottom,
                 new int[]{0x0A000000, 0x00000000, 0x1C000000},
                 new float[]{0f, 0.45f, 1f}, Shader.TileMode.CLAMP));
@@ -218,7 +230,7 @@ public final class GlassRenderer {
         canvas.restore();
 
         // ---------- 8. 描边(上亮下暗) ----------
-        Paint rim = new Paint(Paint.ANTI_ALIAS_FLAG);
+        Paint rim = P_RIM;
         rim.setStyle(Paint.Style.STROKE);
         rim.setStrokeWidth(Math.max(1.2f, h * 0.022f));
         rim.setShader(new LinearGradient(0, rect.top, 0, rect.bottom,

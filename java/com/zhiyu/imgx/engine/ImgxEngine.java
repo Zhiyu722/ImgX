@@ -275,12 +275,36 @@ public final class ImgxEngine {
         p.done(true, "打包完成 → " + outImg.getAbsolutePath());
     }
 
-    /** raw 镜像 → sparse 镜像 */
-    public static void packSparse(File raw, File outSparse, Progress p) throws IOException {
-        p.log("══ 打包: " + raw.getName() + " → sparse ══");
-        SparseImage.fromRaw(raw, outSparse, p);
-        p.log("已生成 sparse: " + outSparse.getName() + " (" + (outSparse.length() / 1048576) + " MB)");
-        p.done(true, "打包完成 → " + outSparse.getAbsolutePath());
+    /** 目录 → sparse 镜像: 先 make_ext4fs 打 raw, 再用 TIK img2simg 转 sparse(更标准) */
+    public static void packSparse(File srcDir, File outSparse, String label, ToolPaths tools, Progress p)
+            throws IOException {
+        p.log("══ 打包: " + srcDir.getName() + " → sparse ══");
+        File raw = File.createTempFile("imgx_raw", ".img");
+        try {
+            Ext4Tool.pack(srcDir, raw, label, tools, p);   // 1) 目录 → ext4 raw
+            if (tools.img2simg.exists()) {                 // 2) raw → sparse (TIK 工具优先)
+                p.log("调用 img2simg 转换 sparse ...");
+                List<String> cmd = Exec.cmd(tools.img2simg.getAbsolutePath(),
+                        raw.getAbsolutePath(), outSparse.getAbsolutePath(), "4096");
+                int code = Exec.run(tools.libDir, p, cmd);
+                if (code != 0) throw new IOException("img2simg 失败 (exit " + code + ")");
+            } else {
+                p.log("img2simg 不存在, 使用内置 sparse 打包器");
+                SparseImage.fromRaw(raw, outSparse, p);
+            }
+            p.log("已生成 sparse: " + outSparse.getName() + " (" + (outSparse.length() / 1048576) + " MB)");
+            p.done(true, "打包完成 → " + outSparse.getAbsolutePath());
+        } finally {
+            raw.delete();
+        }
+    }
+
+    /** 目录 → erofs 镜像 (TIK mkfs.erofs) */
+    public static void packErofs(File srcDir, File outImg, String label, ToolPaths tools, Progress p)
+            throws IOException {
+        p.log("══ 打包: " + srcDir.getName() + " → erofs ══");
+        ErofsTool.pack(srcDir, outImg, label, tools, p);
+        p.done(true, "打包完成 → " + outImg.getAbsolutePath());
     }
 
     /** 解包目录 → boot 镜像 */

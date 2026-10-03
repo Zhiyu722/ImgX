@@ -17,6 +17,8 @@ public final class Binaries {
     private static final String[] BINARIES = {
             "debugfs", "mke2fs", "brotli", "lz4", "magiskboot", "e2fsdroid",
             "lpmake", "extract.erofs", "make_ext4fs", "payload-dumper-go",
+            // TIK 工具全家桶: sparse/erofs 打包 + zstd + 备用工具
+            "img2simg", "mkfs.erofs", "zstd", "cpio", "dtc", "busybox", "delta_generator",
     };
 
     /** 随包分发的配置文件(也解压到 bin 目录) */
@@ -62,6 +64,9 @@ public final class Binaries {
                 new File(dir, "extract.erofs"),
                 new File(dir, "make_ext4fs"),
                 new File(dir, "payload-dumper-go"),
+                new File(dir, "img2simg"),
+                new File(dir, "mkfs.erofs"),
+                new File(dir, "zstd"),
                 libDir);
 
         boolean needExtract = versionChanged;

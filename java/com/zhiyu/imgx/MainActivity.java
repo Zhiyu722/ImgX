@@ -18,6 +18,7 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -48,6 +49,8 @@ public class MainActivity extends Activity {
     private GlassPager pager;
     private DotIndicator dots;
     private GlassSegmented topTabs;
+    private LinearLayout actionBar;    // 底部固定动作栏(开始解包/打包, 便利)
+    private GlassButton actionBtn;
     private TextView permHint;
     private GlassButton permBtn;
 
@@ -122,33 +125,46 @@ public class MainActivity extends Activity {
         topArea.setGravity(Gravity.CENTER_HORIZONTAL);
         topArea.setPadding((int) dp(18), 0, (int) dp(18), 0);
 
-        // 品牌标题: DNA(渐变) + 副标题
+        // 顶部: 全宽玻璃顶栏(左 ImgX 图标+品牌, 右版本号), 悬浮阴影, 简洁规整
         LinearLayout brandRow = new LinearLayout(this);
-        brandRow.setGravity(Gravity.CENTER_VERTICAL | Gravity.CENTER_HORIZONTAL);
+        brandRow.setOrientation(LinearLayout.HORIZONTAL);
+        brandRow.setGravity(Gravity.CENTER_VERTICAL);
+        brandRow.setPadding((int) dp(16), (int) dp(8), (int) dp(16), (int) dp(8));
+        android.graphics.drawable.GradientDrawable brandBg =
+                new android.graphics.drawable.GradientDrawable();
+        brandBg.setColor(0xCCFFFFFF);
+        brandBg.setCornerRadius(dp(14));
+        brandRow.setBackground(brandBg);
+        brandRow.setElevation(dp(2));
+        ImageView brandIv = new ImageView(this);
+        brandIv.setImageResource(R.mipmap.ic_launcher);
+        LinearLayout.LayoutParams ivLp = new LinearLayout.LayoutParams((int) dp(22), (int) dp(22));
+        brandRow.addView(brandIv, ivLp);
         TextView brand = new TextView(this);
         brand.setText("ImgX");
-        brand.setTextSize(23);
+        brand.setTextSize(18);
         brand.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         brand.setTextColor(0xFF169AFF);
-        brand.setShadowLayer(dp(10), 0, dp(2), 0x44169AFF);
-        brand.setLetterSpacing(0.02f);
-        brandRow.addView(brand);
-        TextView brandSub = new TextView(this);
-        brandSub.setText("固件解包助手");
-        brandSub.setTextSize(11.5f);
-        brandSub.setTextColor(0xFF7A8794);
-        brandSub.setLetterSpacing(0.12f);
-        android.widget.LinearLayout.LayoutParams subLp =
-                new android.widget.LinearLayout.LayoutParams(
-                        android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
-                        android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
-        subLp.leftMargin = (int) dp(8);
-        brandRow.addView(brandSub, subLp);
+        LinearLayout.LayoutParams brLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        brLp.leftMargin = (int) dp(8);
+        brandRow.addView(brand, brLp);
+        TextView brandVer = new TextView(this);
+        brandVer.setText("v4.0.0");
+        brandVer.setTextSize(12);
+        brandVer.setTextColor(0xFF7A8794);
+        LinearLayout.LayoutParams verLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+                1f);
+        verLp.gravity = Gravity.RIGHT | Gravity.CENTER_VERTICAL;
+        brandVer.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        brandRow.addView(brandVer, verLp);
         topArea.addView(brandRow, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, (int) dp(30)));
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
         // 玻璃导航栏(解包/打包/关于): 显示在屏幕底部
         topTabs = new GlassSegmented(this, new String[]{"解包", "打包", "关于"});
+        topTabs.setInstantMode(true);   // 即时模式: 胶囊完全由分页器回流驱动, 避免双弹簧动画卡顿
         topTabs.setOnSelectedListener(index -> {
             tabDragging = false;
             pager.setCurrentPage(index, true);
@@ -179,7 +195,7 @@ public class MainActivity extends Activity {
         FrameLayout.LayoutParams pagerLp = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT);
         pagerLp.topMargin = (int) (dp(96) + statusBarHeight());
-        pagerLp.bottomMargin = (int) (dp(62) + navBarHeight());   // 底部给玻璃导航栏让位
+        pagerLp.bottomMargin = (int) (dp(130) + navBarHeight());   // 给底部固定动作栏+导航栏让位
         root.addView(pager, pagerLp);
 
         // 分辨率适配: 测量真实顶栏高度后动态设置分页器上边距(避免不同屏幕遮挡/错位)
@@ -198,6 +214,7 @@ public class MainActivity extends Activity {
             // 分页器是唯一动画来源: 胶囊/指示点 1:1 跟随, 不做二次弹簧(否则点击会"慢半拍")
             topTabs.setPosition(pos, true);
             dots.setPosition(pos);
+            updateActionBar(index);
         });
 
         // 底部指示器(移到导航栏上方)
@@ -207,6 +224,20 @@ public class MainActivity extends Activity {
                 FrameLayout.LayoutParams.WRAP_CONTENT, (int) dp(12), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
         dotLp.bottomMargin = (int) (dp(76) + navBarHeight());
         root.addView(dots, dotLp);
+
+        // 底部固定动作栏: 开始解包/开始打包 始终可见(便利), 随页面切换
+        actionBar = new LinearLayout(this);
+        actionBar.setOrientation(LinearLayout.VERTICAL);
+        actionBar.setPadding((int) dp(20), 0, (int) dp(20), 0);
+        actionBtn = new GlassButton(this, "开始解包", GlassButton.STYLE_PRIMARY);
+        actionBar.addView(actionBtn, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, (int) dp(52)));
+        FrameLayout.LayoutParams abLp = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        abLp.bottomMargin = (int) (dp(66) + navBarHeight());
+        root.addView(actionBar, abLp);
+        updateActionBar(0);
 
         // 玻璃导航栏: 底部居中, 左右留 18dp
         FrameLayout.LayoutParams tabLp = new FrameLayout.LayoutParams(
@@ -309,10 +340,6 @@ public class MainActivity extends Activity {
         c3.addView(row);
         col.addView(card3, cardLp());
 
-        GlassButton runBtn = new GlassButton(this, "开始解包", GlassButton.STYLE_PRIMARY);
-        runBtn.setOnClickListener(v -> startUnpack());
-        col.addView(runBtn, btnLp());
-
         unpackLog = new LogView(this);
         unpackLog.setVisibility(View.GONE);
         col.addView(unpackLog, logLp());
@@ -358,14 +385,12 @@ public class MainActivity extends Activity {
         card3.attachScene(scene);
         LinearLayout c3 = cardColumn(card3);
         c3.addView(fieldLabel("输出格式"));
-        formatSeg = new GlassSegmented(this, new String[]{"ext4 镜像", "sparse 镜像", "boot 镜像"});
+        formatSeg = new GlassSegmented(this, new String[]{"ext4 镜像", "sparse 镜像", "erofs 镜像", "boot 镜像"});
+        formatSeg.setInstantMode(true);   // 卡片内单选: 点选即停, 不跑玻璃弹簧动画(防闪烁)
+        formatSeg.attachScene(scene);
         c3.addView(formatSeg, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, (int) dp(44)));
         col.addView(card3, cardLp());
-
-        GlassButton runBtn = new GlassButton(this, "开始打包", GlassButton.STYLE_PRIMARY);
-        runBtn.setOnClickListener(v -> startPack());
-        col.addView(runBtn, btnLp());
 
         packLog = new LogView(this);
         packLog.setVisibility(View.GONE);
@@ -383,6 +408,12 @@ public class MainActivity extends Activity {
         GlassCard card1 = new GlassCard(this);
         card1.attachScene(scene);
         LinearLayout c1 = cardColumn(card1);
+        ImageView iconIv = new ImageView(this);
+        iconIv.setImageResource(R.mipmap.ic_launcher);
+        LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams((int) dp(72), (int) dp(72));
+        iconLp.gravity = Gravity.CENTER_HORIZONTAL;
+        iconLp.bottomMargin = (int) dp(10);
+        c1.addView(iconIv, iconLp);
         TextView title = new TextView(this);
         title.setText("ImgX 固件解包助手");
         title.setTextColor(0xFF14191C);
@@ -416,7 +447,7 @@ public class MainActivity extends Activity {
         GlassCard card2 = new GlassCard(this);
         card2.attachScene(scene);
         LinearLayout c2 = cardColumn(card2);
-        c2.addView(fieldLabel("原理(移植自 D.N.A3)"));
+        c2.addView(fieldLabel("工作原理"));
         c2.addView(infoLine("· 魔数识别: 不靠后缀, 直接读文件头判断 zip / sparse / ext4 / super / payload / boot 等格式"));
         c2.addView(infoLine("· sparse→raw: 解析 Android sparse 块表(RAW/FILL/DONTCARE)展开为完整镜像"));
         c2.addView(infoLine("· super.img: 解析 liblp geometry + metadata 表, 按 extent 切出各分区"));
@@ -434,18 +465,34 @@ public class MainActivity extends Activity {
                 "*.new.dat", "*.dat.br", "*.zip", "*.br", "boot.img", "*.gz"}));
         col.addView(card3, cardLp());
 
-        GlassCard card4 = new GlassCard(this);
-        card4.attachScene(scene);
-        LinearLayout c4 = cardColumn(card4);
-        c4.addView(infoLine("无需 root: 解包只需读取镜像文件, 只有\"从手机物理分区导出镜像\"才需要 root, 本应用不包含该功能。"));
-        c4.addView(infoLine("输出默认保存到 /sdcard/ImgX/out, 路径可自定义。"));
-        c4.addView(infoLine("来源: github.com/ColdWindScholar/D.N.A3 (MIT)"));
-        col.addView(card4, cardLp());
-
         return scrollWrap(col);
     }
 
+    /** 底部固定动作栏随页面切换: 0=解包 1=打包 2=关于(隐藏) */
+    private void updateActionBar(int index) {
+        if (actionBar == null || actionBtn == null) return;
+        if (index == 0) {
+            actionBtn.setText("开始解包");
+            actionBtn.setOnClickListener(v -> startUnpack());
+            actionBar.setVisibility(View.VISIBLE);
+        } else if (index == 1) {
+            actionBtn.setText("开始打包");
+            actionBtn.setOnClickListener(v -> startPack());
+            actionBar.setVisibility(View.VISIBLE);
+        } else {
+            actionBar.setVisibility(View.GONE);
+        }
+    }
+
     // ================= 页面构建工具 =================
+
+    /** 弹性空白: 吸收内容区剩余高度, 让卡片间隙均匀(内容不足时不堆在底部, 更和谐) */
+    /** 弹性空白(已不使用, 保留备用): 吸收内容区剩余高度, 让卡片间隙均匀 */
+    private View flexibleSpace(float weight) {
+        View v = new View(this);
+        v.setLayoutParams(new LinearLayout.LayoutParams(1, 0, weight));
+        return v;
+    }
 
     private LinearLayout pageColumn() {
         LinearLayout col = new LinearLayout(this);
@@ -457,7 +504,7 @@ public class MainActivity extends Activity {
     private LinearLayout cardColumn(GlassCard card) {
         LinearLayout c = new LinearLayout(this);
         c.setOrientation(LinearLayout.VERTICAL);
-        c.setPadding((int) dp(18), (int) dp(16), (int) dp(18), (int) dp(16));
+        c.setPadding((int) dp(18), (int) dp(10), (int) dp(18), (int) dp(10));
         card.addView(c);
         return c;
     }
@@ -493,13 +540,52 @@ public class MainActivity extends Activity {
             sv.addView(content, new ScrollView.LayoutParams(
                     ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT));
         }
-        return sv;
+
+        // 底部"继续下滑"提示: 内容超出屏幕时才显示, 提示下方还有内容; 点击可下滚
+        FrameLayout holder = new FrameLayout(this);
+        holder.addView(sv, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        LinearLayout moreHint = new LinearLayout(this);
+        moreHint.setGravity(Gravity.CENTER);
+        moreHint.setOrientation(LinearLayout.VERTICAL);
+        moreHint.setPadding((int) dp(10), (int) dp(3), (int) dp(10), (int) dp(3));
+        android.graphics.drawable.GradientDrawable hintBg =
+                new android.graphics.drawable.GradientDrawable();
+        hintBg.setColor(0xD8FFFFFF);
+        hintBg.setCornerRadius(dp(16));
+        moreHint.setBackground(hintBg);
+        TextView arrowTv = new TextView(this);
+        arrowTv.setText("▼ 继续下滑");
+        arrowTv.setTextColor(0xFF169AFF);
+        arrowTv.setTextSize(12);
+        arrowTv.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        moreHint.addView(arrowTv);
+        FrameLayout.LayoutParams hintLp = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        hintLp.bottomMargin = (int) dp(10);
+        holder.addView(moreHint, hintLp);
+        moreHint.setOnClickListener(v -> sv.smoothScrollBy(0, (int) dp(220)));
+        sv.post(() -> {
+            View top = sv.getChildCount() > 0 ? sv.getChildAt(0) : null;
+            boolean overflows = top != null && top.getHeight() > sv.getHeight();
+            moreHint.setVisibility(overflows ? View.VISIBLE : View.GONE);
+        });
+        // 滚动到底部后提示隐藏(避免挡住最后内容), 上滑回来再显示
+        sv.getViewTreeObserver().addOnScrollChangedListener(() -> {
+            View top = sv.getChildCount() > 0 ? sv.getChildAt(0) : null;
+            if (top == null) return;
+            boolean atBottom = sv.getScrollY() + sv.getHeight() >= top.getHeight() - 4;
+            boolean overflows = top.getHeight() > sv.getHeight();
+            moreHint.setVisibility(overflows && !atBottom ? View.VISIBLE : View.GONE);
+        });
+        return holder;
     }
 
     private FrameLayout.LayoutParams cardLp() {
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT);
-        lp.bottomMargin = (int) dp(14);
+        lp.bottomMargin = (int) dp(6);
         return lp;
     }
 
@@ -1292,7 +1378,9 @@ public class MainActivity extends Activity {
                 if (fmt == 0) {
                     ImgxEngine.packExt4(new File(src), new File(out), label, tools, p);
                 } else if (fmt == 1) {
-                    ImgxEngine.packSparse(new File(src), new File(out), p);
+                    ImgxEngine.packSparse(new File(src), new File(out), label, tools, p);
+                } else if (fmt == 2) {
+                    ImgxEngine.packErofs(new File(src), new File(out), label, tools, p);
                 } else {
                     ImgxEngine.packBoot(new File(src), new File(out), tools, p);
                 }

@@ -41,7 +41,19 @@ public class GlassCard extends FrameLayout {
         solidStroke.setColor(0x1AE0E6EC);
     }
 
-    public void attachScene(GlassScene s) { this.scene = s; }
+    public void attachScene(GlassScene s) {
+        if (this.scene == s) return;
+        if (this.scene != null) this.scene.detachGlassView(this);
+        this.scene = s;
+        if (s != null) s.attachGlassView(this);
+        invalidate();
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        if (scene != null) scene.detachGlassView(this);
+        super.onDetachedFromWindow();
+    }
 
     public GlassCard setRadius(float radiusDp) {
         this.radius = dp(radiusDp);

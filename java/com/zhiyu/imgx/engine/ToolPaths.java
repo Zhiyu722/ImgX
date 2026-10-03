@@ -16,11 +16,14 @@ public class ToolPaths {
     public final File extractErofs;
     public final File makeExt4fs;
     public final File payloadDumper;
+    public final File img2simg;     // TIK: raw → sparse
+    public final File mkfsErofs;    // TIK: 目录 → erofs
+    public final File zstd;         // TIK: zstd 解压
     public final File libDir;
 
     public ToolPaths(File debugfs, File mke2fs, File brotli, File lz4, File magiskboot,
                      File e2fsdroid, File lpmake, File extractErofs, File makeExt4fs,
-                     File payloadDumper, File libDir) {
+                     File payloadDumper, File img2simg, File mkfsErofs, File zstd, File libDir) {
         this.debugfs = debugfs;
         this.mke2fs = mke2fs;
         this.brotli = brotli;
@@ -31,6 +34,9 @@ public class ToolPaths {
         this.extractErofs = extractErofs;
         this.makeExt4fs = makeExt4fs;
         this.payloadDumper = payloadDumper;
+        this.img2simg = img2simg;
+        this.mkfsErofs = mkfsErofs;
+        this.zstd = zstd;
         this.libDir = libDir;
     }
 
@@ -50,6 +56,9 @@ public class ToolPaths {
                 new File(prefix + "/bin/extract.erofs"),
                 new File(prefix + "/bin/make_ext4fs"),
                 new File(System.getenv("PDG") != null ? System.getenv("PDG") : "build/tools/payload-dumper-go"),
+                new File(prefix + "/bin/img2simg"),
+                new File(prefix + "/bin/mkfs.erofs"),
+                new File(prefix + "/bin/zstd"),
                 lib);
     }
 
