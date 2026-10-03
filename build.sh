@@ -169,8 +169,8 @@ if [ ! -f "$KSTORE" ]; then
         -dname "CN=DNA Unpacker, OU=DNA, O=zhiyu, C=CN" 2>/dev/null
 fi
 apksigner sign --ks "$KSTORE" --ks-pass "pass:$KSPASS" \
-    --out "$OUT/DNA-No-ROOT-V3.0.1.apk" "$OUT/unsigned.apk"
+    --out "$OUT/DNA-No-ROOT-V3.0.2.apk" "$OUT/unsigned.apk"
 
 echo ""
-echo "APK: $OUT/DNA-No-ROOT-V3.0.1.apk"
-ls -lh "$OUT/DNA-No-ROOT-V3.0.1.apk"
+echo "APK: $OUT/DNA-No-ROOT-V3.0.2.apk"
+ls -lh "$OUT/DNA-No-ROOT-V3.0.2.apk"
