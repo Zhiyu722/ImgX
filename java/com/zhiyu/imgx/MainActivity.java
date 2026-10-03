@@ -147,7 +147,7 @@ public class MainActivity extends Activity {
         topArea.addView(brandRow, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, (int) dp(30)));
 
-        // 玻璃顶栏: 宽度自适应(左右留 18dp)
+        // 玻璃导航栏(解包/打包/关于): 显示在屏幕底部
         topTabs = new GlassSegmented(this, new String[]{"解包", "打包", "关于"});
         topTabs.setOnSelectedListener(index -> {
             tabDragging = false;
@@ -158,8 +158,6 @@ public class MainActivity extends Activity {
             pager.setPositionFraction(pos, false);
         });
         topTabs.attachScene(scene);
-        topArea.addView(topTabs, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, (int) dp(50)));
         this.topArea = topArea;
 
         FrameLayout.LayoutParams topLp = new FrameLayout.LayoutParams(
@@ -181,7 +179,7 @@ public class MainActivity extends Activity {
         FrameLayout.LayoutParams pagerLp = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT);
         pagerLp.topMargin = (int) (dp(96) + statusBarHeight());
-        pagerLp.bottomMargin = (int) dp(40);
+        pagerLp.bottomMargin = (int) (dp(62) + navBarHeight());   // 底部给玻璃导航栏让位
         root.addView(pager, pagerLp);
 
         // 分辨率适配: 测量真实顶栏高度后动态设置分页器上边距(避免不同屏幕遮挡/错位)
@@ -202,13 +200,22 @@ public class MainActivity extends Activity {
             dots.setPosition(pos);
         });
 
-        // 底部指示器
+        // 底部指示器(移到导航栏上方)
         dots = new DotIndicator(this);
         dots.setCount(3);
         FrameLayout.LayoutParams dotLp = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT, (int) dp(12), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-        dotLp.bottomMargin = (int) (dp(12) + navBarHeight());
+        dotLp.bottomMargin = (int) (dp(76) + navBarHeight());
         root.addView(dots, dotLp);
+
+        // 玻璃导航栏: 底部居中, 左右留 18dp
+        FrameLayout.LayoutParams tabLp = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, (int) dp(50),
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        tabLp.bottomMargin = (int) (dp(8) + navBarHeight());
+        tabLp.leftMargin = (int) dp(18);
+        tabLp.rightMargin = (int) dp(18);
+        root.addView(topTabs, tabLp);
 
         setContentView(root);
 

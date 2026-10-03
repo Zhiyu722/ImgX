@@ -114,6 +114,19 @@ public final class Ext4Tool {
         }
 
         p.log("计算大小: 文件 " + (fileSize / 1048576) + " MB → 镜像 " + (size / 1048576) + " MB");
+
+        // 优先: TIK 式 make_ext4fs 打包(制盘时直接写入 属主/权限/SELinux, 打包完成即可刷机)
+        if (tools.makeExt4fs != null && tools.makeExt4fs.isFile()) {
+            try {
+                packMakeExt4fs(srcDir, outImg, label, size, tools, p);
+                p.log("ext4 镜像已生成(权限已内嵌) → " + outImg.getAbsolutePath());
+                return;
+            } catch (Exception e) {
+                p.log("make_ext4fs 打包失败: " + e.getMessage() + ", 回退 mke2fs+debugfs");
+                if (outImg.exists() && !outImg.delete()) outImg.deleteOnExit();
+            }
+        }
+
         p.log("调用 mke2fs 生成 ext4 ...");
         List<String> cmd = Exec.cmd(tools.mke2fs.getAbsolutePath(),
                 "-q", "-t", "ext4", "-b", "4096", "-d", srcDir.getAbsolutePath(),
@@ -125,6 +138,116 @@ public final class Ext4Tool {
         // 用解包时导出的 fs_config + SELinux 上下文恢复文件属主与安全上下文
         applyConfig(outImg, srcDir, label, tools, p);
         p.log("ext4 镜像已生成 → " + outImg.getAbsolutePath());
+    }
+
+    // ==================== TIK 式打包: make_ext4fs(权限内嵌, 可直刷) ====================
+
+    /** make_ext4fs -S file_contexts -C fs_config 打包, uid/gid/mode/SELinux 全部写入镜像。 */
+    private static void packMakeExt4fs(File srcDir, File outImg, String label, long size,
+                                       ToolPaths tools, Progress p) throws IOException {
+        File cfgDir = new File(srcDir, "config");
+        if (!cfgDir.isDirectory() && srcDir.getParentFile() != null)
+            cfgDir = new File(srcDir.getParentFile(), "config");
+        File fsCfg = pickCfg(cfgDir, label, "_fs_config");
+        File ctxCfg = pickCfg(cfgDir, label, "_contexts");
+        if (fsCfg == null || ctxCfg == null)
+            throw new IOException("缺少 config/fs_config 或 contexts(请先解包生成配置)");
+        File tmpDir = new File(srcDir, ".imgx_mke");
+        if (!tmpDir.exists() && !tmpDir.mkdirs()) throw new IOException("无法创建临时目录");
+        File mkeFs = convertFsConfig(fsCfg, tmpDir);
+        File mkeCtx = convertContexts(ctxCfg, tmpDir);
+        p.log("调用 make_ext4fs 生成 ext4(含属主/权限/SELinux) ...");
+        List<String> cmd = Exec.cmd(tools.makeExt4fs.getAbsolutePath(),
+                "-T", "0",
+                "-S", mkeCtx.getAbsolutePath(),
+                "-l", String.valueOf(size),
+                "-C", mkeFs.getAbsolutePath(),
+                "-L", label == null || label.isEmpty() ? "ImgX" : label,
+                "-a", label == null || label.isEmpty() ? "ImgX" : label,
+                outImg.getAbsolutePath(), srcDir.getAbsolutePath());
+        int code = Exec.run(tools.libDir, p, cmd);
+        if (code != 0) throw new IOException("make_ext4fs 失败 (exit " + code + ")");
+    }
+
+    /** img_fs_config(/path uid gid 0mode 0) → make_ext4fs 格式: 路径去前导 /, 根与 lost+found 保留。 */
+    private static File convertFsConfig(File in, File tmpDir) throws IOException {
+        List<String> out = new ArrayList<>();
+        boolean haveRoot = false, haveLost = false;
+        for (String ln : new String(java.nio.file.Files.readAllBytes(in.toPath()))
+                .split("\n")) {
+            ln = ln.trim();
+            if (ln.isEmpty()) continue;
+            String[] f = ln.split("\\s+");
+            if (f.length < 5) continue;
+            String path = f[0];
+            String rest = f[1] + " " + f[2] + " " + f[3] + " " + f[4];
+            if ("/".equals(path)) {
+                out.add("/ " + rest);
+                haveRoot = true;
+            } else if (path.startsWith("/")) {
+                out.add(path.substring(1) + " " + rest);
+            } else {
+                out.add(path + " " + rest);
+            }
+            if (path.contains("lost+found")) haveLost = true;
+        }
+        if (!haveRoot) out.add("/ 0 0 0755 0");
+        if (!haveLost) out.add("/lost+found 0 0 0700 0");
+        out.sort(String::compareTo);   // '/' 排最前; 其余按路径序
+        File outF = new File(tmpDir, "mke_fs_config");
+        Io.writeFile(outF, String.join("\n", out).getBytes());
+        return outF;
+    }
+
+    /** img_contexts(/path ctx) → make_ext4fs -S 格式: 正则特殊字符转义 + 目录继承行。 */
+    private static File convertContexts(File in, File tmpDir) throws IOException {
+        Map<String, String> map = new LinkedHashMap<>();
+        String rootCtx = null;
+        for (String ln : new String(java.nio.file.Files.readAllBytes(in.toPath()))
+                .split("\n")) {
+            ln = ln.trim();
+            if (ln.isEmpty()) continue;
+            String[] f = ln.split("\\s+", 2);
+            if (f.length < 2) continue;
+            if ("/".equals(f[0])) rootCtx = f[1];
+            map.put(f[0], f[1]);
+        }
+        if (rootCtx == null) rootCtx = "u:object_r:system_file:s0";
+        // 目录 = 有其他条目以此为前缀
+        java.util.Set<String> dirs = new java.util.HashSet<>();
+        for (String k : map.keySet()) {
+            if ("/".equals(k)) continue;
+            int cut = k.lastIndexOf('/');
+            if (cut > 0) dirs.add(k.substring(0, cut));
+        }
+        List<String> out = new ArrayList<>();
+        out.add("/ " + rootCtx);
+        List<String> keys = new ArrayList<>(map.keySet());
+        keys.remove("/");
+        keys.sort((a, b) -> {
+            int c = Integer.compare(a.length(), b.length());   // 父目录(短)在前
+            return c != 0 ? c : a.compareTo(b);
+        });
+        for (String k : keys) {
+            String ctx = map.get(k);
+            String esc = escapeRegex(k);
+            out.add(esc + " " + ctx);
+            if (dirs.contains(k)) out.add(esc + "(/.*)? " + ctx);
+        }
+        File outF = new File(tmpDir, "mke_file_contexts");
+        Io.writeFile(outF, String.join("\n", out).getBytes());
+        return outF;
+    }
+
+    /** file_contexts 中正则特殊字符转义(lost+found → lost\\+found 等)。 */
+    private static String escapeRegex(String path) {
+        StringBuilder sb = new StringBuilder(path.length() + 8);
+        for (int i = 0; i < path.length(); i++) {
+            char c = path.charAt(i);
+            if ("\\^$.|?*+(){}[]".indexOf(c) >= 0) sb.append('\\');
+            sb.append(c);
+        }
+        return sb.toString();
     }
 
     // ==================== 权限/上下文: 导出与应用(替代 e2fsdroid) ====================

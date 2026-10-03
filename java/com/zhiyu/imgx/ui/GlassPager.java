@@ -25,8 +25,8 @@ public class GlassPager extends ViewGroup {
     }
 
     // iOS 手感: 点击干脆(≈0.25s), 滑动松手从容(≈0.38s), 都是临界阻尼(不回弹)
-    private static final double K_SWIPE = 140.0;
-    private static final double K_CLICK = 620.0;   // 点击切页: 更快响应
+    private static final double K_SWIPE = 300.0;   // 滑动松手: 更快到位(原先 140)
+    private static final double K_CLICK = 760.0;   // 点击切页: 更快响应(原先 620)
     private static final double SPRING_DAMPING = 0.99;
     /** 当前生效的刚度(按交互类型切换) */
     private double activeK = K_CLICK;
