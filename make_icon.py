@@ -1,121 +1,75 @@
 #!/usr/bin/env python3
-"""生成 ImgX 霓虹炫酷图标(5 密度): 暗夜底 + 青→紫渐变炫光 X + 射线 + 星光。"""
+"""ImgX 应用图标生成器(简约版): 品牌蓝柔和渐变底 + 纯白粗圆头 X + 克制微高光。
+规范见 ~/.dsh/skills/app-icon-design/SKILL.md。输出 5 档密度(res/mipmap-*-v4/ic_launcher.png)。"""
 from PIL import Image, ImageDraw, ImageFilter
 import math, os
 
-def lerp(a, b, t):
-    t = max(0.0, min(1.0, t))
-    return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(3))
-
-def star(d, cx, cy, R1, R2, w, fill):
-    """4 角星光"""
-    pts = []
-    for i in range(8):
-        ang = math.pi / 4 * i
-        rad = R1 if i % 2 == 0 else R2
-        pts.append((cx + math.cos(ang) * rad, cy + math.sin(ang) * rad))
-    d.polygon(pts, fill=fill)
-    d.ellipse([cx - w, cy - w, cx + w, cy + w], fill=fill)
+# 参数(调这里即可换风格)
+BG_TOP   = (62, 155, 255)   # 左上亮蓝
+BG_BOTTOM= (21, 100, 232)   # 右下深一档的蓝(同一色相)
+X_COLOR  = (255, 255, 255, 255)
+X_W      = 0.185             # X 条宽(画布比例)
+X_L      = 0.565             # X 条长(画布比例, 留白充足)
+SHADOW   = (20, 40, 90, 58)  # 轻投影颜色/透明度
+GLOSS_A  = 56                # 顶部玻璃高光透明度
 
 def make_icon(S):
     SS = S * 4
     img = Image.new("RGBA", (SS, SS), (0, 0, 0, 0))
     px = img.load()
-    # 暗夜对角渐变: 深蓝黑(左上) → 深紫(右下)
-    c1, c2 = (8, 12, 42), (34, 16, 74)
+    # 柔和对角渐变(垂直方向渐变更稳, 带 10% 水平偏移模拟光从左上打来)
     for y in range(SS):
         for x in range(SS):
-            t = (x + y) / (2.0 * SS)
-            px[x, y] = lerp(c1, c2, t) + (255,)
-    img = img.filter(ImageFilter.GaussianBlur(SS * 0.012))
+            t = (y / SS) * 0.9 + (x / SS) * 0.1
+            px[x, y] = tuple(int(BG_TOP[i] + (BG_BOTTOM[i] - BG_TOP[i]) * t) for i in range(3)) + (255,)
     d = ImageDraw.Draw(img, "RGBA")
 
-    # 底部能量光晕(中心偏下一点, 青蓝)
-    halo = Image.new("RGBA", (SS, SS), (0, 0, 0, 0))
-    hd = ImageDraw.Draw(halo, "RGBA")
-    hd.ellipse([SS*0.18, SS*0.22, SS*0.82, SS*0.86], fill=(26, 108, 255, 70))
-    halo = halo.filter(ImageFilter.GaussianBlur(SS * 0.10))
-    img.alpha_composite(halo)
-
-    # 放射能量射线(细长三角, 青白, 低透明度)
-    for i, ang in enumerate((0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330)):
-        a = math.radians(ang)
-        raylen = SS * (0.62 if i % 3 else 0.74)
-        x0 = SS*0.5 + math.cos(a) * SS*0.13
-        y0 = SS*0.5 + math.sin(a) * SS*0.13
-        x1 = SS*0.5 + math.cos(a) * raylen
-        y1 = SS*0.5 + math.sin(a) * raylen
-        per = math.pi/2 + a
-        wpx = SS * 0.008
-        d.polygon([(x0 - math.cos(per)*wpx*3, y0 - math.sin(per)*wpx*3),
-                   (x0 + math.cos(per)*wpx*3, y0 + math.sin(per)*wpx*3),
-                   (x1, y1)], fill=(120, 220, 255, 26))
-
-    # 霓虹 X: 先画两层辉光, 再画渐变本体
     cx = cy = SS * 0.5
-    L, W = SS * 0.64, SS * 0.20
+    W = X_W * SS
+    L = X_L * SS
     r = W / 2
-    def arm_pts(ang):
+
+    def bar_pts(ang):
         a = math.radians(ang)
-        p0 = (cx - math.cos(a)*L/2, cy - math.sin(a)*L/2)
-        p1 = (cx + math.cos(a)*L/2, cy + math.sin(a)*L/2)
-        return p0, p1
+        dx, dy = math.cos(a), math.sin(a)
+        return ((cx - dx*L/2, cy - dy*L/2), (cx + dx*L/2, cy + dy*L/2))
 
-    def draw_bar(draw, ang, width, color):
-        p0, p1 = arm_pts(ang)
-        draw.line([p0, p1], fill=color, width=int(width))
-        rr = width / 2
-        draw.ellipse([p0[0]-rr, p0[1]-rr, p0[0]+rr, p0[1]+rr], fill=color)
-        draw.ellipse([p1[0]-rr, p1[1]-rr, p1[0]+rr, p1[1]+rr], fill=color)
+    def draw_bar(dd, p0, p1, width, color):
+        dd.line([p0, p1], fill=color, width=int(width))
+        rr = width/2
+        dd.ellipse([p0[0]-rr, p0[1]-rr, p0[0]+rr, p0[1]+rr], fill=color)
+        dd.ellipse([p1[0]-rr, p1[1]-rr, p1[0]+rr, p1[1]+rr], fill=color)
 
-    # 外辉光(青)
-    glow1 = Image.new("RGBA", (SS, SS), (0, 0, 0, 0))
-    g1 = ImageDraw.Draw(glow1, "RGBA")
+    # 轻投影(先画, 贴一点, 小模糊)
+    sh = Image.new("RGBA", (SS, SS), (0, 0, 0, 0))
+    sd = ImageDraw.Draw(sh, "RGBA")
     for ang in (45, -45):
-        draw_bar(g1, ang, W*1.9, (0, 226, 255, 150))
-    glow1 = glow1.filter(ImageFilter.GaussianBlur(SS * 0.025))
-    img.alpha_composite(glow1)
-    # 内辉光(紫)
-    glow2 = Image.new("RGBA", (SS, SS), (0, 0, 0, 0))
-    g2 = ImageDraw.Draw(glow2, "RGBA")
+        p0, p1 = bar_pts(ang)
+        draw_bar(sd, (p0[0], p0[1] + SS*0.010), (p1[0], p1[1] + SS*0.010), W, SHADOW)
+    sh = sh.filter(ImageFilter.GaussianBlur(SS * 0.006))
+    img.alpha_composite(sh)
+
+    # 纯白 X
     for ang in (45, -45):
-        draw_bar(g2, ang, W*1.35, (168, 85, 255, 170))
-    glow2 = glow2.filter(ImageFilter.GaussianBlur(SS * 0.012))
-    img.alpha_composite(glow2)
+        p0, p1 = bar_pts(ang)
+        draw_bar(d, p0, p1, W, X_COLOR)
 
-    # 本体: 双色霓虹 X —— 一条臂纯青, 一条臂纯紫, 交叉处近白
-    for ang, color in ((45, (0, 229, 255)), (-45, (168, 85, 255))):
-        p0, p1 = arm_pts(ang)
-        mask = Image.new("L", (SS, SS), 0)
-        md = ImageDraw.Draw(mask)
-        md.line([p0, p1], fill=255, width=int(W))
-        md.ellipse([p0[0]-r, p0[1]-r, p0[0]+r, p0[1]+r], fill=255)
-        md.ellipse([p1[0]-r, p1[1]-r, p1[0]+r, p1[1]+r], fill=255)
-        for y in range(SS):
-            row = [img.getpixel((x, y)) for x in range(SS)] if False else None
-            for x in range(SS):
-                if mask.getpixel((x, y)) > 0:
-                    img.putpixel((x, y), color + (255,))
-    # 中心交叉亮核(近白)
-    core = Image.new("RGBA", (SS, SS), (0, 0, 0, 0))
-    cd = ImageDraw.Draw(core, "RGBA")
-    cd.ellipse([cx-W*0.30, cy-W*0.30, cx+W*0.30, cy+W*0.30], fill=(250, 252, 255, 255))
-    core = core.filter(ImageFilter.GaussianBlur(SS * 0.003))
-    img.alpha_composite(core)
+    # 克制高光: 每条臂上沿一条半透明白(玻璃反光)
+    gloss = Image.new("RGBA", (SS, SS), (0, 0, 0, 0))
+    gd = ImageDraw.Draw(gloss, "RGBA")
+    for ang in (45, -45):
+        a = math.radians(ang)
+        p0, p1 = bar_pts(ang)
+        per = (math.cos(a + math.pi/2), math.sin(a + math.pi/2))  # 朝向"上"一侧
+        # 取垂直于臂、指向右上方的偏移(两条臂都取同一"天顶"方向的高光)
+        up = (0, -1)
+        off = W * 0.30 * up[0]
+        # 简化: 沿臂方向在中心线偏上 W*0.30 处画细条
+        ox, oy = up[0] * W * 0.30, up[1] * W * 0.30
+        draw_bar(gd, (p0[0]+ox, p0[1]+oy), (p1[0]+ox, p1[1]+oy), W * 0.38, (255, 255, 255, GLOSS_A))
+    gloss = gloss.filter(ImageFilter.GaussianBlur(SS * 0.004))
+    img.alpha_composite(gloss)
 
-    # 星光点缀(左上大星 + 右下小星, 白光带辉)
-    def add_star(sx, sy, R1, R2, w, al):
-        sl = Image.new("RGBA", (SS, SS), (0, 0, 0, 0))
-        sdd = ImageDraw.Draw(sl, "RGBA")
-        star(sdd, sx, sy, R1, R2, w, (255, 255, 255, al))
-        sl = sl.filter(ImageFilter.GaussianBlur(SS * 0.010))
-        sd2 = ImageDraw.Draw(sl, "RGBA")
-        star(sd2, sx, sy, R1, R2, w, (255, 255, 255, al))
-        img.alpha_composite(sl)
-    add_star(SS*0.22, SS*0.26, SS*0.075, SS*0.032, SS*0.010, 215)
-    add_star(SS*0.80, SS*0.74, SS*0.045, SS*0.018, SS*0.008, 170)
-
-    img = img.filter(ImageFilter.GaussianBlur(SS * 0.002))
     return img.resize((S, S), Image.LANCZOS)
 
 if __name__ == "__main__":
