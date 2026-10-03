@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# DNA 解包助手 — APK 构建脚本(无 Gradle, aapt2 + javac + d8 + apksigner)
+# ImgX 解包助手 — APK 构建脚本(无 Gradle, aapt2 + javac + d8 + apksigner)
 set -e
 cd "$(dirname "$0")"
 
@@ -166,11 +166,11 @@ echo "== [7/7] sign =="
 if [ ! -f "$KSTORE" ]; then
     keytool -genkeypair -keystore "$KSTORE" -alias dna -keyalg RSA -keysize 2048 \
         -validity 10950 -storepass "$KSPASS" -keypass "$KSPASS" \
-        -dname "CN=DNA Unpacker, OU=DNA, O=zhiyu, C=CN" 2>/dev/null
+        -dname "CN=ImgX, OU=ImgX, O=zhiyu, C=CN" 2>/dev/null
 fi
 apksigner sign --ks "$KSTORE" --ks-pass "pass:$KSPASS" \
-    --out "$OUT/DNA-No-ROOT-V3.0.2.apk" "$OUT/unsigned.apk"
+    --out "$OUT/ImgX-v4.0.0.apk" "$OUT/unsigned.apk"
 
 echo ""
-echo "APK: $OUT/DNA-No-ROOT-V3.0.2.apk"
-ls -lh "$OUT/DNA-No-ROOT-V3.0.2.apk"
+echo "APK: $OUT/ImgX-v4.0.0.apk"
+ls -lh "$OUT/ImgX-v4.0.0.apk"

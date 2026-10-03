@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.DNA" parent="android:Theme.Material.Light.NoActionBar">
+    <style name="Theme.ImgX" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/bg_top</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:navigationBarColor">#E8EEF7</item>
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
-        <item name="android:colorAccent">@color/dna_blue</item>
+        <item name="android:colorAccent">@color/imgx_blue</item>
     </style>
 </resources>

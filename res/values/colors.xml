@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="dna_blue">#169AFF</color>
-    <color name="dna_blue_dark">#1273E8</color>
-    <color name="dna_blue_light">#64C6FF</color>
+    <color name="imgx_blue">#169AFF</color>
+    <color name="imgx_blue_dark">#1273E8</color>
+    <color name="imgx_blue_light">#64C6FF</color>
     <color name="text_primary">#1C242C</color>
     <color name="text_secondary">#696E73</color>
     <color name="glass_fill">#B8FFFFFF</color>

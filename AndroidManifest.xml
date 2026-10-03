@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.zhiyu.dna"
-    android:versionCode="6"
-    android:versionName="3.0.2">
+    package="com.zhiyu.imgx"
+    android:versionCode="7"
+    android:versionName="4.0.0">
 
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="27" />
 
@@ -19,7 +19,7 @@
         android:forceDarkAllowed="false"
         android:extractNativeLibs="true"
         android:icon="@mipmap/ic_launcher"
-        android:theme="@style/Theme.DNA"
+        android:theme="@style/Theme.ImgX"
         android:allowBackup="true"
         android:requestLegacyExternalStorage="true"
         android:usesCleartextTraffic="false"
