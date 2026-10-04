@@ -101,92 +101,168 @@ public final class Ext4Tool {
     public static void pack(File srcDir, File outImg, String label, ToolPaths tools, Progress p)
             throws IOException {
         if (!srcDir.isDirectory()) throw new IOException("源目录无效: " + srcDir);
-        // 源目录若残留上次打包失败的 .imgx_mke 临时目录, 先移走再打(否则会被打进镜像导致
-        // "not found in canned fs_config / cannot lookup security context" 失败), 打完整再移回
-        File legacyTmp = new File(srcDir, ".imgx_mke");
-        File stashTmp = null;
-        if (legacyTmp.exists()) {
-            // 残留在源目录同级的 /sdcard 里暂存(普通用户可访问), 打完整再移回
-            File stashParent = (srcDir.getParentFile() != null) ? srcDir.getParentFile()
-                    : new File(System.getProperty("java.io.tmpdir"));
-            stashTmp = new File(stashParent, ".imgx_mke_stash_" + System.currentTimeMillis());
-            if (legacyTmp.renameTo(stashTmp)) {
-                p.log("已移走残留临时目录 .imgx_mke(打包后自动还原)");
-            } else {
-                stashTmp = null;
+        // 工作目录(输出同级, /sdcard 普通用户可写): 放 App 配置副本 + 转换产物, 用完删除
+        File workDir = new File(outImg.getParentFile() != null ? outImg.getParentFile()
+                        : new File(System.getProperty("java.io.tmpdir")),
+                ".imgx_mke_" + System.currentTimeMillis());
+        if (!workDir.exists() && !workDir.mkdirs()) throw new IOException("无法创建临时目录");
+
+        // 1. 配置预读: 定位源目录里的 App 配置(config/ 或 ImgX/config/), 复制到工作目录
+        //    (config 目录随后要被移走, 必须在移走前把打包要用的 fs_config/contexts 备份出来)
+        File cfgDir = pickCfgDir(srcDir, label);
+        File fsCfg = cfgDir != null ? pickCfg(cfgDir, label, "_fs_config") : null;
+        File ctxCfg = cfgDir != null ? pickCfg(cfgDir, label, "_contexts") : null;
+        File mkeFs = null, mkeCtx = null;
+        if (fsCfg != null && ctxCfg != null) {
+            mkeFs = convertFsConfig(fsCfg, workDir, srcDir);
+            mkeCtx = convertContexts(ctxCfg, workDir, srcDir);
+        }
+
+        // 2. 移走源目录内 App 生成物(不进入镜像): .imgx_mke 残留 / config / ImgX 配置目录 / __image_size.txt
+        java.util.List<File> stashed = new ArrayList<>();
+        java.util.List<File> candidates = new java.util.ArrayList<>();
+        File imgxDir = new File(srcDir, "ImgX");
+        if (imgxDir.isDirectory() && (new File(imgxDir, "__image_size.txt").exists()
+                || new File(imgxDir, "config").isDirectory())) candidates.add(imgxDir);
+        candidates.add(new File(srcDir, "config"));
+        candidates.add(new File(srcDir, "__image_size.txt"));
+        candidates.add(new File(srcDir, ".imgx_mke"));
+        File stashParent = (srcDir.getParentFile() != null) ? srcDir.getParentFile()
+                : workDir;
+        for (File cand : candidates) {
+            if (!cand.exists()) continue;
+            File dst = new File(stashParent, "." + cand.getName() + "_stash_" + System.currentTimeMillis());
+            if (cand.renameTo(dst)) {
+                stashed.add(dst);
+                p.log("已移走 App 生成目录 " + cand.getName() + "(不入镜像, 打包后还原)");
             }
         }
+
         try {
-            packInner(srcDir, outImg, label, tools, p);
+            packInner(srcDir, outImg, label, tools, p, mkeFs, mkeCtx, workDir);
         } finally {
-            if (stashTmp != null && !legacyTmp.exists()) {
-                stashTmp.renameTo(legacyTmp);
+            // 3. 还原源目录 + 清理工作目录
+            for (File dst : stashed) {
+                File back = new File(dst.getParentFile(), dst.getName()
+                        .replaceFirst("^\\." + "", "").replaceFirst("_stash_\\d+$", ""));
+                if (!back.exists()) dst.renameTo(back);
             }
+            Io.deleteRecursive(workDir);
         }
     }
 
-    private static void packInner(File srcDir, File outImg, String label, ToolPaths tools, Progress p)
-            throws IOException {
+    /** TIK 式自动容量: 内容越小余量比例越高(照搬 TIK run.py rsize 阶梯算法) */
+    private static long tikCalcSize(long size) {
+        if (size <= 2097152) return 2097152;          // 极小内容: 保底 2MB
+        long size_ = size + 10086;                    // 恒加 10086 字节
+        double bs;
+        if (size_ > 2684354560L) bs = 1.0658;         // > 2.5GB
+        else if (size_ > 1073741824L) bs = 1.0858;    // 1~2.5GB
+        else if (size_ > 536870912L) bs = 1.0958;     // 500MB~1GB
+        else if (size_ > 104857600L) bs = 1.1158;     // 100~500MB
+        else bs = 1.1258;                             // ≤ 100MB
+        return (long) (size_ * bs);
+    }
+
+    /** 定位打包配置目录: 源目录/config → 源目录/ImgX/config → 源目录父级/config → null */
+    private static File pickCfgDir(File srcDir, String label) {        File[] cands = {
+                new File(srcDir, "config"),
+                new File(new File(srcDir, "ImgX"), "config"),
+        };
+        for (File c : cands) {
+            if (c.isDirectory()) return c;
+        }
+        if (srcDir.getParentFile() != null) {
+            File par = new File(srcDir.getParentFile(), "config");
+            if (par.isDirectory()) return par;
+        }
+        return null;
+    }
+
+    private static void packInner(File srcDir, File outImg, String label, ToolPaths tools, Progress p,
+                                  File mkeFs, File mkeCtx, File workDir) throws IOException {
         long fileSize = Io.filesSize(srcDir);
         if (fileSize == 0) throw new IOException("源目录为空");
-        long calcSize = fileSize * 12 / 10 + (20L << 20); // 1.2x + 20MB 余量
-        calcSize = (calcSize + 4095) / 4096 * 4096;
-        if (calcSize < (64L << 20)) calcSize = 64L << 20;
-        // 优先使用原镜像大小(解包时记录), 保证打包后大小与原版一致
-        long size = findOrigSize(srcDir, calcSize);
-        size = Math.max(size, calcSize);
-        if (size != calcSize) {
-            p.log("使用原镜像大小: " + (size / 1048576) + " MB");
-        }
+        // TIK 自动容量算法: 按内容大小分级余量(内容越小余量比例越高), 恒加 10086 字节
+        //   内容 ≤100MB→1.1258x  ≤500MB→1.1158x  ≤1GB→1.0958x  ≤2.5GB→1.0858x  >2.5GB→1.0658x
+        //   内容极少时保底 2MB。这样"只改 1MB"的镜像不会虚大, 加了很多东西也能自动按比例扩容。
+        long size = tikCalcSize(fileSize);
+        size = (size + 4095) / 4096 * 4096;
+        if (size < (64L << 20)) size = 64L << 20;   // make_ext4fs 最小可用容量
 
-        p.log("计算大小: 文件 " + (fileSize / 1048576) + " MB → 镜像 " + (size / 1048576) + " MB");
+        p.log("计算大小: 文件 " + (fileSize / 1048576) + " MB → 镜像 " + (size / 1048576) + " MB (TIK 自动容量)");
 
         // 优先: TIK 式 make_ext4fs 打包(制盘时直接写入 属主/权限/SELinux, 打包完成即可刷机)
-        if (tools.makeExt4fs != null && tools.makeExt4fs.isFile()) {
-            try {
-                packMakeExt4fs(srcDir, outImg, label, size, tools, p);
-                p.log("ext4 镜像已生成(权限已内嵌) → " + outImg.getAbsolutePath());
-                return;
-            } catch (Exception e) {
-                p.log("make_ext4fs 打包失败: " + e.getMessage() + ", 回退 mke2fs+debugfs");
-                if (outImg.exists() && !outImg.delete()) outImg.deleteOnExit();
+        // 自动扩容兜底: 容量不足(如加了很多东西)时按 ×1.25 逐级扩容重试, 最多 5 次/上限 4GB
+        for (int attempt = 0; attempt < 6; attempt++) {
+            boolean spaceErr = false;
+            if (tools.makeExt4fs != null && tools.makeExt4fs.isFile()) {
+                try {
+                    packMakeExt4fs(srcDir, outImg, label, size, tools, p, mkeFs, mkeCtx);
+                    p.log("ext4 镜像已生成(权限已内嵌) → " + outImg.getAbsolutePath());
+                    return;
+                } catch (Exception e) {
+                    spaceErr = isSpaceError(e.getMessage());
+                    if (spaceErr) {
+                        p.log("容量不足: " + e.getMessage());
+                    } else {
+                        p.log("make_ext4fs 打包失败: " + e.getMessage() + ", 回退 mke2fs+debugfs");
+                    }
+                    if (outImg.exists() && !outImg.delete()) outImg.deleteOnExit();
+                }
             }
+            if (!spaceErr) {
+                // mke2fs 回退(同样带自动扩容)
+                try {
+                    p.log("调用 mke2fs 生成 ext4 ...");
+                    List<String> cmd = Exec.cmd(tools.mke2fs.getAbsolutePath(),
+                            "-q", "-t", "ext4", "-b", "4096", "-d", srcDir.getAbsolutePath(),
+                            "-L", label == null || label.isEmpty() ? "ImgX" : label,
+                            outImg.getAbsolutePath(), String.valueOf(size / 4096)); // 块数(4K/块), 传字节会被当成块数导致镜像虚大数 TB
+                    int code = Exec.run(tools.libDir, p, cmd);
+                    if (code != 0) throw new IOException("mke2fs 打包失败 (exit " + code + ")");
+                    // 用解包时导出的 fs_config + SELinux 上下文恢复文件属主与安全上下文
+                    applyConfig(outImg, srcDir, label, tools, p);
+                    p.log("ext4 镜像已生成 → " + outImg.getAbsolutePath());
+                    return;
+                } catch (Exception e) {
+                    if (isSpaceError(e.getMessage()) && attempt < 5) {
+                        spaceErr = true;
+                    } else {
+                        throw e instanceof IOException ? (IOException) e
+                                : new IOException("打包失败: " + e.getMessage());
+                    }
+                }
+            }
+            if (!spaceErr) break;   // 非空间错误: 停止重试
+            size = (size * 5 / 4 + 4095) / 4096 * 4096;      // 扩容 ×1.25
+            if (size > (4L << 30)) size = 4L << 30;          // 上限 4GB
+            p.log("自动扩容 → " + (size / 1048576) + " MB 重试");
         }
+        throw new IOException("打包失败: 多次扩容后仍空间不足(源目录可能过大)");
+    }
 
-        p.log("调用 mke2fs 生成 ext4 ...");
-        List<String> cmd = Exec.cmd(tools.mke2fs.getAbsolutePath(),
-                "-q", "-t", "ext4", "-b", "4096", "-d", srcDir.getAbsolutePath(),
-                "-L", label == null || label.isEmpty() ? "ImgX" : label,
-                outImg.getAbsolutePath(), String.valueOf(size / 4096)); // 块数(4K/块), 传字节会被当成块数导致镜像虚大数 TB
-        int code = Exec.run(tools.libDir, p, cmd);
-        if (code != 0) throw new IOException("mke2fs 打包失败 (exit " + code + ")");
-
-        // 用解包时导出的 fs_config + SELinux 上下文恢复文件属主与安全上下文
-        applyConfig(outImg, srcDir, label, tools, p);
-        p.log("ext4 镜像已生成 → " + outImg.getAbsolutePath());
+    /** 是否空间不足类错误(容量不够, 需要扩容重试) */
+    private static boolean isSpaceError(String msg) {
+        if (msg == null) return false;
+        String m = msg.toLowerCase();
+        return m.contains("no space") || m.contains("not enough") || m.contains("enospc")
+                || m.contains("space left") || m.contains("too small") || m.contains("larger than")
+                || m.contains("exceeds") || m.contains("extents") || m.contains("capacity");
     }
 
     // ==================== TIK 式打包: make_ext4fs(权限内嵌, 可直刷) ====================
 
-    /** make_ext4fs -S file_contexts -C fs_config 打包, uid/gid/mode/SELinux 全部写入镜像。 */
+    /** make_ext4fs -S file_contexts -C fs_config 打包, uid/gid/mode/SELinux 全部写入镜像。
+     *  mkeFs/mkeCtx 由 pack() 预转换好传入(源目录 config 已被移走, 不能再现找)。 */
     private static void packMakeExt4fs(File srcDir, File outImg, String label, long size,
-                                       ToolPaths tools, Progress p) throws IOException {
-        File cfgDir = new File(srcDir, "config");
-        if (!cfgDir.isDirectory() && srcDir.getParentFile() != null)
-            cfgDir = new File(srcDir.getParentFile(), "config");
-        File fsCfg = pickCfg(cfgDir, label, "_fs_config");
-        File ctxCfg = pickCfg(cfgDir, label, "_contexts");
-        if (fsCfg == null || ctxCfg == null)
+                                       ToolPaths tools, Progress p,
+                                       File mkeFs, File mkeCtx) throws IOException {
+        if (mkeFs == null || mkeCtx == null)
             throw new IOException("缺少 config/fs_config 或 contexts(请先解包生成配置)");
-        File tmpDir = new File(outImg.getParentFile() != null ? outImg.getParentFile()
-                        : new File(System.getProperty("java.io.tmpdir")),
-                ".imgx_mke_" + System.currentTimeMillis());
-        if (!tmpDir.exists() && !tmpDir.mkdirs()) throw new IOException("无法创建临时目录");
-        File mkeFs = convertFsConfig(fsCfg, tmpDir);
-        File mkeCtx = convertContexts(ctxCfg, tmpDir);
         p.log("调用 make_ext4fs 生成 ext4(含属主/权限/SELinux) ...");
         List<String> cmd = Exec.cmd(tools.makeExt4fs.getAbsolutePath(),
-                "-T", "0",
+                "-J", "-T", "0",      // -J 带日志(对齐 TIK 命令)
                 "-S", mkeCtx.getAbsolutePath(),
                 "-l", String.valueOf(size),
                 "-C", mkeFs.getAbsolutePath(),
@@ -195,41 +271,72 @@ public final class Ext4Tool {
                 outImg.getAbsolutePath(), srcDir.getAbsolutePath());
         int code = Exec.run(tools.libDir, p, cmd);
         if (code != 0) throw new IOException("make_ext4fs 失败 (exit " + code + ")");
-        Io.deleteRecursive(tmpDir);   // 清理临时目录(配置转换产物), 不留残留
     }
 
-    /** img_fs_config(/path uid gid 0mode 0) → make_ext4fs 格式: 路径去前导 /, 根与 lost+found 保留。 */
-    private static File convertFsConfig(File in, File tmpDir) throws IOException {
-        List<String> out = new ArrayList<>();
-        boolean haveRoot = false, haveLost = false;
+    /** img_fs_config(/path uid gid 0mode 0) → make_ext4fs 格式: 路径去前导 /, 根与 lost+found 保留。
+     *  照搬 TIK fspatch: 扫描源目录, 为 config 缺失的路径补默认条目 —— 保证 make_ext4fs
+     *  不会因 "not found in canned fs_config" 失败(不再需要手工排除目录)。 */
+    private static File convertFsConfig(File in, File tmpDir, File srcDir) throws IOException {
+        Map<String, String> map = new LinkedHashMap<>();
         for (String ln : new String(java.nio.file.Files.readAllBytes(in.toPath()))
                 .split("\n")) {
             ln = ln.trim();
             if (ln.isEmpty()) continue;
             String[] f = ln.split("\\s+");
             if (f.length < 5) continue;
-            String path = f[0];
-            String rest = f[1] + " " + f[2] + " " + f[3] + " " + f[4];
+            map.put(f[0], f[1] + " " + f[2] + " " + f[3] + " " + f[4]);
+        }
+        // TIK fspatch 等价: 源目录每个文件/目录都必须有条目, 缺失的补默认值
+        java.util.Set<String> dirs = new java.util.HashSet<>();
+        java.util.Set<String> files = new java.util.HashSet<>();
+        collectPaths(srcDir, "", dirs, files);
+        for (String d : dirs) if (!map.containsKey(d)) map.put(d, "0 0 0755 0");
+        for (String f : files) if (!map.containsKey(f)) map.put(f, "0 0 0644 0");
+
+        List<String> out = new ArrayList<>();
+        for (Map.Entry<String, String> e : map.entrySet()) {
+            String path = e.getKey(), rest = e.getValue();
             if ("/".equals(path)) {
                 out.add("/ " + rest);
-                haveRoot = true;
             } else if (path.startsWith("/")) {
                 out.add(path.substring(1) + " " + rest);
             } else {
                 out.add(path + " " + rest);
             }
-            if (path.contains("lost+found")) haveLost = true;
         }
-        if (!haveRoot) out.add("/ 0 0 0755 0");
-        if (!haveLost) out.add("/lost+found 0 0 0700 0");
+        if (!map.containsKey("/")) out.add("/ 0 0 0755 0");
+        if (!map.containsKey("/lost+found")) out.add("/lost+found 0 0 0700 0");
         out.sort(String::compareTo);   // '/' 排最前; 其余按路径序
         File outF = new File(tmpDir, "mke_fs_config");
         Io.writeFile(outF, String.join("\n", out).getBytes());
         return outF;
     }
 
-    /** img_contexts(/path ctx) → make_ext4fs -S 格式: 正则特殊字符转义 + 目录继承行。 */
-    private static File convertContexts(File in, File tmpDir) throws IOException {
+    /** 递归收集源目录所有目录/文件路径(带前导 /), 供 fspatch/contextpatch 补全缺失条目 */
+    private static void collectPaths(File dir, String prefix,
+                                     java.util.Set<String> dirs, java.util.Set<String> files) {
+        if ("".equals(prefix)) {
+            dirs.add("/");
+            prefix = "/" + dir.getName();
+            dirs.add(prefix);
+        }
+        File[] children = dir.listFiles();
+        if (children == null) return;
+        for (File c : children) {
+            String p = prefix + "/" + c.getName();
+            if (c.isDirectory()) {
+                dirs.add(p);
+                collectPaths(c, p, dirs, files);
+            } else {
+                files.add(p);
+            }
+        }
+    }
+
+    /** img_contexts(/path ctx) → make_ext4fs -S 格式: 正则特殊字符转义 + 目录继承行。
+     *  照搬 TIK contextpatch: 源目录缺失上下文的路径补默认(根上下文) —— 杜绝
+     *  "cannot lookup security context" 失败。 */
+    private static File convertContexts(File in, File tmpDir, File srcDir) throws IOException {
         Map<String, String> map = new LinkedHashMap<>();
         String rootCtx = null;
         for (String ln : new String(java.nio.file.Files.readAllBytes(in.toPath()))
@@ -242,6 +349,12 @@ public final class Ext4Tool {
             map.put(f[0], f[1]);
         }
         if (rootCtx == null) rootCtx = "u:object_r:system_file:s0";
+        // TIK contextpatch 等价: 源目录所有路径都必须有上下文
+        java.util.Set<String> allDirs = new java.util.HashSet<>();
+        java.util.Set<String> allFiles = new java.util.HashSet<>();
+        collectPaths(srcDir, "", allDirs, allFiles);
+        for (String d : allDirs) if (!map.containsKey(d)) map.put(d, rootCtx);
+        for (String f : allFiles) if (!map.containsKey(f)) map.put(f, rootCtx);
         // 目录 = 有其他条目以此为前缀
         java.util.Set<String> dirs = new java.util.HashSet<>();
         for (String k : map.keySet()) {
