@@ -109,22 +109,24 @@ public final class Ext4Tool {
 
         // 1. 配置预读: 定位源目录里的 App 配置(config/ 或 ImgX/config/), 复制到工作目录
         //    (config 目录随后要被移走, 必须在移走前把打包要用的 fs_config/contexts 备份出来)
+        // 挂载点: 用户填的卷标, 空则默认 system(源目录=分区根内容, 镜像内 /system/... 刷入正确)
+        String mount = (label == null || label.isEmpty()) ? "system" : label;
         File cfgDir = pickCfgDir(srcDir, label);
         File fsCfg = cfgDir != null ? pickCfg(cfgDir, label, "_fs_config") : null;
         File ctxCfg = cfgDir != null ? pickCfg(cfgDir, label, "_contexts") : null;
         File mkeFs = null, mkeCtx = null;
         if (fsCfg != null && ctxCfg != null) {
-            mkeFs = convertFsConfig(fsCfg, workDir, srcDir);
-            mkeCtx = convertContexts(ctxCfg, workDir, srcDir);
+            mkeFs = convertFsConfig(fsCfg, workDir, srcDir, mount);
+            mkeCtx = convertContexts(ctxCfg, workDir, srcDir, mount);
         }
 
-        // 2. 移走源目录内 App 生成物(不进入镜像): .imgx_mke 残留 / config / ImgX 配置目录 / __image_size.txt
+        // 2. 移走源目录内 App 生成物(不进入镜像): .imgx_mke 残留 / config / ImgX(解包输出目录,存在即移走) / rdump(debugfs 残留) / __image_size.txt
         java.util.List<File> stashed = new ArrayList<>();
         java.util.List<File> candidates = new java.util.ArrayList<>();
         File imgxDir = new File(srcDir, "ImgX");
-        if (imgxDir.isDirectory() && (new File(imgxDir, "__image_size.txt").exists()
-                || new File(imgxDir, "config").isDirectory())) candidates.add(imgxDir);
+        if (imgxDir.isDirectory()) candidates.add(imgxDir);
         candidates.add(new File(srcDir, "config"));
+        candidates.add(new File(srcDir, "rdump"));
         candidates.add(new File(srcDir, "__image_size.txt"));
         candidates.add(new File(srcDir, ".imgx_mke"));
         File stashParent = (srcDir.getParentFile() != null) ? srcDir.getParentFile()
@@ -139,7 +141,7 @@ public final class Ext4Tool {
         }
 
         try {
-            packInner(srcDir, outImg, label, tools, p, mkeFs, mkeCtx, workDir);
+            packInner(srcDir, outImg, label, tools, p, mkeFs, mkeCtx, workDir, mount);
         } finally {
             // 3. 还原源目录 + 清理工作目录
             for (File dst : stashed) {
@@ -180,7 +182,7 @@ public final class Ext4Tool {
     }
 
     private static void packInner(File srcDir, File outImg, String label, ToolPaths tools, Progress p,
-                                  File mkeFs, File mkeCtx, File workDir) throws IOException {
+                                  File mkeFs, File mkeCtx, File workDir, String mount) throws IOException {
         long fileSize = Io.filesSize(srcDir);
         if (fileSize == 0) throw new IOException("源目录为空");
         // TIK 自动容量算法: 按内容大小分级余量(内容越小余量比例越高), 恒加 10086 字节
@@ -198,7 +200,7 @@ public final class Ext4Tool {
             boolean spaceErr = false;
             if (tools.makeExt4fs != null && tools.makeExt4fs.isFile()) {
                 try {
-                    packMakeExt4fs(srcDir, outImg, label, size, tools, p, mkeFs, mkeCtx);
+                    packMakeExt4fs(srcDir, outImg, mount, size, tools, p, mkeFs, mkeCtx);
                     p.log("ext4 镜像已生成(权限已内嵌) → " + outImg.getAbsolutePath());
                     return;
                 } catch (Exception e) {
@@ -254,8 +256,9 @@ public final class Ext4Tool {
     // ==================== TIK 式打包: make_ext4fs(权限内嵌, 可直刷) ====================
 
     /** make_ext4fs -S file_contexts -C fs_config 打包, uid/gid/mode/SELinux 全部写入镜像。
-     *  mkeFs/mkeCtx 由 pack() 预转换好传入(源目录 config 已被移走, 不能再现找)。 */
-    private static void packMakeExt4fs(File srcDir, File outImg, String label, long size,
+     *  mkeFs/mkeCtx 由 pack() 预转换好传入(源目录 config 已被移走, 不能再现找)。
+     *  mount = 挂载点/分区名(空时 pack() 已默认 system), 与转换时 fs_config 前缀一致。 */
+    private static void packMakeExt4fs(File srcDir, File outImg, String mount, long size,
                                        ToolPaths tools, Progress p,
                                        File mkeFs, File mkeCtx) throws IOException {
         if (mkeFs == null || mkeCtx == null)
@@ -266,17 +269,19 @@ public final class Ext4Tool {
                 "-S", mkeCtx.getAbsolutePath(),
                 "-l", String.valueOf(size),
                 "-C", mkeFs.getAbsolutePath(),
-                "-L", label == null || label.isEmpty() ? "ImgX" : label,
-                "-a", label == null || label.isEmpty() ? "ImgX" : label,
+                "-L", mount,
+                "-a", mount,
                 outImg.getAbsolutePath(), srcDir.getAbsolutePath());
         int code = Exec.run(tools.libDir, p, cmd);
         if (code != 0) throw new IOException("make_ext4fs 失败 (exit " + code + ")");
     }
 
-    /** img_fs_config(/path uid gid 0mode 0) → make_ext4fs 格式: 路径去前导 /, 根与 lost+found 保留。
-     *  照搬 TIK fspatch: 扫描源目录, 为 config 缺失的路径补默认条目 —— 保证 make_ext4fs
-     *  不会因 "not found in canned fs_config" 失败(不再需要手工排除目录)。 */
-    private static File convertFsConfig(File in, File tmpDir, File srcDir) throws IOException {
+    /** img_fs_config → make_ext4fs -C 格式(照搬 TIK imgextractor 导出的格式 + fspatch 全量补全):
+     *  - 根条目 "/ 0 0 0755 0"、分区条目 "{mount} 0 0 0755 0"、"{mount}/lost+found 0 0 0700 0"
+     *  - 其余每个路径 p(源目录全量, 从镜像根收集): "{mount}{p} {uid gid mode}" —— 实证:
+     *    make_ext4fs -a <mount> 的查找键 = 挂载前缀+源相对路径, 必须拼上挂载点,
+     *    否则 "not found in canned fs_config"。 */
+    private static File convertFsConfig(File in, File tmpDir, File srcDir, String mount) throws IOException {
         Map<String, String> map = new LinkedHashMap<>();
         for (String ln : new String(java.nio.file.Files.readAllBytes(in.toPath()))
                 .split("\n")) {
@@ -286,57 +291,60 @@ public final class Ext4Tool {
             if (f.length < 5) continue;
             map.put(f[0], f[1] + " " + f[2] + " " + f[3] + " " + f[4]);
         }
-        // TIK fspatch 等价: 源目录每个文件/目录都必须有条目, 缺失的补默认值
         java.util.Set<String> dirs = new java.util.HashSet<>();
         java.util.Set<String> files = new java.util.HashSet<>();
-        collectPaths(srcDir, "", dirs, files);
-        for (String d : dirs) if (!map.containsKey(d)) map.put(d, "0 0 0755 0");
-        for (String f : files) if (!map.containsKey(f)) map.put(f, "0 0 0644 0");
+        collectPaths(srcDir, dirs, files);
+        String m = (mount == null || mount.isEmpty()) ? "system" : mount;
 
         List<String> out = new ArrayList<>();
-        for (Map.Entry<String, String> e : map.entrySet()) {
-            String path = e.getKey(), rest = e.getValue();
-            if ("/".equals(path)) {
-                out.add("/ " + rest);
-            } else if (path.startsWith("/")) {
-                out.add(path.substring(1) + " " + rest);
-            } else {
-                out.add(path + " " + rest);
-            }
+        String rootVal = map.get("/");
+        out.add("/ " + (rootVal != null ? rootVal : "0 0 0755 0"));
+        out.add(m + " 0 0 0755 0");
+        out.add(m + "/lost+found 0 0 0700 0");
+        for (String p : dirs) {
+            if ("/".equals(p)) continue;
+            String val = map.get(p);
+            if (val == null) val = map.get(m + p);   // 原条目可能已带分区前缀
+            out.add(m + p + " " + (val != null ? val : "0 0 0755 0"));
         }
-        if (!map.containsKey("/")) out.add("/ 0 0 0755 0");
-        if (!map.containsKey("/lost+found")) out.add("/lost+found 0 0 0700 0");
-        out.sort(String::compareTo);   // '/' 排最前; 其余按路径序
+        for (String f : files) {
+            if ("/".equals(f)) continue;
+            String val = map.get(f);
+            if (val == null) val = map.get(m + f);
+            out.add(m + f + " " + (val != null ? val : "0 0 0644 0"));
+        }
+        out.sort(String::compareTo);
         File outF = new File(tmpDir, "mke_fs_config");
         Io.writeFile(outF, String.join("\n", out).getBytes());
         return outF;
     }
 
-    /** 递归收集源目录所有目录/文件路径(带前导 /), 供 fspatch/contextpatch 补全缺失条目 */
-    private static void collectPaths(File dir, String prefix,
-                                     java.util.Set<String> dirs, java.util.Set<String> files) {
-        if ("".equals(prefix)) {
-            dirs.add("/");
-            prefix = "/" + dir.getName();
-            dirs.add(prefix);
-        }
+    /** 递归收集源目录所有目录/文件路径(带前导 /, 从镜像根开始), 供 fspatch/contextpatch 补全缺失条目。
+     *  注意: 路径必须是从镜像根 / 起(不带源目录名), 否则补全条目与 make_ext4fs 的镜像内路径对不上。 */
+    private static void collectPaths(File dir, java.util.Set<String> dirs, java.util.Set<String> files) {
+        dirs.add("/");                       // 镜像根
+        walk(dir, "", dirs, files);          // 源目录直接子项 = 镜像根内容
+    }
+
+    private static void walk(File dir, String prefix,
+                             java.util.Set<String> dirs, java.util.Set<String> files) {
         File[] children = dir.listFiles();
         if (children == null) return;
         for (File c : children) {
             String p = prefix + "/" + c.getName();
             if (c.isDirectory()) {
                 dirs.add(p);
-                collectPaths(c, p, dirs, files);
+                walk(c, p, dirs, files);
             } else {
                 files.add(p);
             }
         }
     }
 
-    /** img_contexts(/path ctx) → make_ext4fs -S 格式: 正则特殊字符转义 + 目录继承行。
-     *  照搬 TIK contextpatch: 源目录缺失上下文的路径补默认(根上下文) —— 杜绝
-     *  "cannot lookup security context" 失败。 */
-    private static File convertContexts(File in, File tmpDir, File srcDir) throws IOException {
+    /** img_contexts → make_ext4fs -S 格式: 正则特殊字符转义 + 目录继承行。
+     *  照搬 TIK contextpatch: 全量补全 + 挂载前缀 —— make_ext4fs 查找键为完整镜像路径
+     *  (如 /system/ImgX), contexts 条目必须是 /{mount}{path}, 否则 "cannot lookup security context"。 */
+    private static File convertContexts(File in, File tmpDir, File srcDir, String mount) throws IOException {
         Map<String, String> map = new LinkedHashMap<>();
         String rootCtx = null;
         for (String ln : new String(java.nio.file.Files.readAllBytes(in.toPath()))
@@ -348,34 +356,42 @@ public final class Ext4Tool {
             if ("/".equals(f[0])) rootCtx = f[1];
             map.put(f[0], f[1]);
         }
-        if (rootCtx == null) rootCtx = "u:object_r:system_file:s0";
-        // TIK contextpatch 等价: 源目录所有路径都必须有上下文
-        java.util.Set<String> allDirs = new java.util.HashSet<>();
-        java.util.Set<String> allFiles = new java.util.HashSet<>();
-        collectPaths(srcDir, "", allDirs, allFiles);
-        for (String d : allDirs) if (!map.containsKey(d)) map.put(d, rootCtx);
-        for (String f : allFiles) if (!map.containsKey(f)) map.put(f, rootCtx);
-        // 目录 = 有其他条目以此为前缀
+        String baseCtx = (rootCtx != null) ? rootCtx : "u:object_r:system_file:s0";
         java.util.Set<String> dirs = new java.util.HashSet<>();
-        for (String k : map.keySet()) {
-            if ("/".equals(k)) continue;
-            int cut = k.lastIndexOf('/');
-            if (cut > 0) dirs.add(k.substring(0, cut));
-        }
+        java.util.Set<String> files = new java.util.HashSet<>();
+        collectPaths(srcDir, dirs, files);
+        String m = (mount == null || mount.isEmpty()) ? "system" : mount;
+        String mp = "/" + m;
+
         List<String> out = new ArrayList<>();
-        out.add("/ " + rootCtx);
-        List<String> keys = new ArrayList<>(map.keySet());
-        keys.remove("/");
-        keys.sort((a, b) -> {
-            int c = Integer.compare(a.length(), b.length());   // 父目录(短)在前
-            return c != 0 ? c : a.compareTo(b);
-        });
-        for (String k : keys) {
-            String ctx = map.get(k);
-            String esc = escapeRegex(k);
-            out.add(esc + " " + ctx);
-            if (dirs.contains(k)) out.add(esc + "(/.*)? " + ctx);
+        out.add("/ " + baseCtx);
+        out.add(escapeRegex(mp) + " " + baseCtx);
+        out.add(escapeRegex(mp) + "(/.*)? " + baseCtx);
+        for (String p : dirs) {
+            if ("/".equals(p)) continue;
+            String full = mp + p;
+            String val = map.get(p);
+            if (val == null) val = map.get(full);
+            if (val == null) val = baseCtx;
+            String esc = escapeRegex(full);
+            out.add(esc + " " + val);
+            out.add(esc + "(/.*)? " + val);
         }
+        for (String f : files) {
+            if ("/".equals(f)) continue;
+            String full = mp + f;
+            String val = map.get(f);
+            if (val == null) val = map.get(full);
+            if (val == null) val = baseCtx;
+            out.add(escapeRegex(full) + " " + val);
+        }
+        out.sort((a, b) -> {
+            int i = a.indexOf(' '), j = b.indexOf(' ');
+            String pa = i > 0 ? a.substring(0, i) : a;
+            String pb = j > 0 ? b.substring(0, j) : b;
+            int c = Integer.compare(pa.length(), pb.length());   // 父目录(短)在前
+            return c != 0 ? c : pa.compareTo(pb);
+        });
         File outF = new File(tmpDir, "mke_file_contexts");
         Io.writeFile(outF, String.join("\n", out).getBytes());
         return outF;
