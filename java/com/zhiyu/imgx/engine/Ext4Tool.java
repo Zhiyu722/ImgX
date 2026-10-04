@@ -396,9 +396,10 @@ public final class Ext4Tool {
             out.add(escapeRegex(full) + " " + val);
         }
         out.sort((a, b) -> {
-            int i = a.indexOf(' '), j = b.indexOf(' ');
-            String pa = i > 0 ? a.substring(0, i) : a;
-            String pb = j > 0 ? b.substring(0, j) : b;
+            // 比较用"规则路径"(去掉继承后缀), 保证父规则(/system)整组在子规则(/system/app)之前,
+            // 否则继承行更长会排到最后, 让 /system(/.*)? 覆盖具体条目(所有文件退化为 system_file)
+            String pa = a.substring(0, a.indexOf(' ')).replace("(/.*)?", "");
+            String pb = b.substring(0, b.indexOf(' ')).replace("(/.*)?", "");
             int c = Integer.compare(pa.length(), pb.length());   // 父目录(短)在前
             return c != 0 ? c : pa.compareTo(pb);
         });
@@ -504,9 +505,11 @@ public final class Ext4Tool {
             Matcher mc = Pattern.compile("security\\.selinux \\(\\d+\\) = \"([^\"]+)\"").matcher(ln);
             if (mc.find() && curIno >= 0) ctxByIno.put(curIno, mc.group(1));
         }
-        // 上下文按路径长度降序(长路径优先, 与 AOSP file_contexts 语义一致)
+        // 上下文按路径长度升序(短路径/父规则在前, 具体条目在后):
+        // make_ext4fs 的 file_contexts 语义 = 最后一个匹配胜出, 父目录规则必须在前,
+        // 具体条目在后才能覆盖(原先降序会让 /system 覆盖 /system/app, 所有文件退化为 system_file)
         java.util.TreeMap<Integer, List<String>> byLen =
-                new java.util.TreeMap<>(java.util.Collections.reverseOrder());
+                new java.util.TreeMap<>();
         for (Map.Entry<String, long[]> e : tree.entrySet()) {
             String ctx = ctxByIno.get(e.getValue()[0]);
             if (ctx == null) continue;
