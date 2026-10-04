@@ -385,7 +385,7 @@ public class MainActivity extends Activity {
         card3.attachScene(scene);
         LinearLayout c3 = cardColumn(card3);
         c3.addView(fieldLabel("输出格式"));
-        formatSeg = new GlassSegmented(this, new String[]{"ext4 镜像", "sparse 镜像", "erofs 镜像", "boot 镜像"});
+        formatSeg = new GlassSegmented(this, new String[]{"ext4", "sparse", "erofs", "boot"});
         formatSeg.setInstantMode(true);   // 卡片内单选: 点选即停, 不跑玻璃弹簧动画(防闪烁)
         formatSeg.attachScene(scene);
         c3.addView(formatSeg, new LinearLayout.LayoutParams(

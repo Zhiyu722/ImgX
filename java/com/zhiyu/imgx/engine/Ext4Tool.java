@@ -101,6 +101,32 @@ public final class Ext4Tool {
     public static void pack(File srcDir, File outImg, String label, ToolPaths tools, Progress p)
             throws IOException {
         if (!srcDir.isDirectory()) throw new IOException("源目录无效: " + srcDir);
+        // 源目录若残留上次打包失败的 .imgx_mke 临时目录, 先移走再打(否则会被打进镜像导致
+        // "not found in canned fs_config / cannot lookup security context" 失败), 打完整再移回
+        File legacyTmp = new File(srcDir, ".imgx_mke");
+        File stashTmp = null;
+        if (legacyTmp.exists()) {
+            // 残留在源目录同级的 /sdcard 里暂存(普通用户可访问), 打完整再移回
+            File stashParent = (srcDir.getParentFile() != null) ? srcDir.getParentFile()
+                    : new File(System.getProperty("java.io.tmpdir"));
+            stashTmp = new File(stashParent, ".imgx_mke_stash_" + System.currentTimeMillis());
+            if (legacyTmp.renameTo(stashTmp)) {
+                p.log("已移走残留临时目录 .imgx_mke(打包后自动还原)");
+            } else {
+                stashTmp = null;
+            }
+        }
+        try {
+            packInner(srcDir, outImg, label, tools, p);
+        } finally {
+            if (stashTmp != null && !legacyTmp.exists()) {
+                stashTmp.renameTo(legacyTmp);
+            }
+        }
+    }
+
+    private static void packInner(File srcDir, File outImg, String label, ToolPaths tools, Progress p)
+            throws IOException {
         long fileSize = Io.filesSize(srcDir);
         if (fileSize == 0) throw new IOException("源目录为空");
         long calcSize = fileSize * 12 / 10 + (20L << 20); // 1.2x + 20MB 余量
@@ -152,7 +178,9 @@ public final class Ext4Tool {
         File ctxCfg = pickCfg(cfgDir, label, "_contexts");
         if (fsCfg == null || ctxCfg == null)
             throw new IOException("缺少 config/fs_config 或 contexts(请先解包生成配置)");
-        File tmpDir = new File(srcDir, ".imgx_mke");
+        File tmpDir = new File(outImg.getParentFile() != null ? outImg.getParentFile()
+                        : new File(System.getProperty("java.io.tmpdir")),
+                ".imgx_mke_" + System.currentTimeMillis());
         if (!tmpDir.exists() && !tmpDir.mkdirs()) throw new IOException("无法创建临时目录");
         File mkeFs = convertFsConfig(fsCfg, tmpDir);
         File mkeCtx = convertContexts(ctxCfg, tmpDir);
@@ -167,6 +195,7 @@ public final class Ext4Tool {
                 outImg.getAbsolutePath(), srcDir.getAbsolutePath());
         int code = Exec.run(tools.libDir, p, cmd);
         if (code != 0) throw new IOException("make_ext4fs 失败 (exit " + code + ")");
+        Io.deleteRecursive(tmpDir);   // 清理临时目录(配置转换产物), 不留残留
     }
 
     /** img_fs_config(/path uid gid 0mode 0) → make_ext4fs 格式: 路径去前导 /, 根与 lost+found 保留。 */

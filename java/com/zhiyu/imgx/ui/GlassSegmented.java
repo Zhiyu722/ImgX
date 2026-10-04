@@ -89,6 +89,7 @@ public class GlassSegmented extends LinearLayout {
             tv.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
             tv.setGravity(Gravity.CENTER);
             tv.setSingleLine(true);
+            tv.setEllipsize(android.text.TextUtils.TruncateAt.END);   // 段太窄时截断, 防止文字溢出到邻段重合
             LayoutParams lp = new LayoutParams(0, LayoutParams.MATCH_PARENT, 1f);
             tv.setLayoutParams(lp);
             tv.setOnClickListener(v -> { if (!dragging) selectNow(idx); });
@@ -235,7 +236,7 @@ public class GlassSegmented extends LinearLayout {
             float w = tv.getPaint().measureText(tv.getText().toString());
             if (w > avail) {
                 float scaled = base * (avail / w) * 0.96f;
-                if (scaled < 9.5f) scaled = 9.5f;
+                if (scaled < 8.5f) scaled = 8.5f;
                 tv.setTextSize(scaled);
             }
         }
