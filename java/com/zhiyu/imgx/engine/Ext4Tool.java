@@ -49,10 +49,10 @@ public final class Ext4Tool {
             }
 
             p.log("调用 debugfs 提取 ext4 文件系统 ...");
-            File rdumpDir = new File(outDir, "rdump");
-            rdumpDir.mkdirs();
+            // TIK 式解包输出: 内容直接提取到 outDir 根(用户选的输出目录 = 打包内容,
+            // 不再套 rdump 子目录层), 打包时完全按用户所选目录来。
             List<String> cmd = Exec.cmd(tools.debugfs.getAbsolutePath(),
-                    "-R", "rdump / " + rdumpDir.getAbsolutePath(),
+                    "-R", "rdump / " + outDir.getAbsolutePath(),
                     raw.getAbsolutePath());
             // 过滤无 root 时的 chown 警告(不影响提取结果, 避免日志刷屏)
             int code = Exec.run(tools.libDir, p, cmd, line ->
@@ -74,7 +74,7 @@ public final class Ext4Tool {
                 p.log("警告: 导出属主/SELinux 配置失败: " + e.getMessage()
                         + " (重打包可能丢失原权限)");
             }
-            p.log("ext4 提取完成 → " + rdumpDir.getAbsolutePath());
+            p.log("ext4 提取完成 → " + outDir.getAbsolutePath());
         } finally {
             if (tempRaw != null) Io.deleteRecursive(tempRaw);
         }
@@ -101,6 +101,16 @@ public final class Ext4Tool {
     public static void pack(File srcDir, File outImg, String label, ToolPaths tools, Progress p)
             throws IOException {
         if (!srcDir.isDirectory()) throw new IOException("源目录无效: " + srcDir);
+        // 解包输出目录结构: debugfs 把文件系统内容提取到 rdump/ 子目录。
+        // 若源目录含 rdump/, 说明用户选的是解包输出目录 —— 实际内容在 rdump 里,
+        // 自动以 rdump/ 为内容源(rdump 本身不入镜像), 否则移走 rdump 会变"源目录为空"。
+        File contentSrc = srcDir;
+        File rdumpDir = new File(srcDir, "rdump");
+        if (rdumpDir.isDirectory()) {
+            contentSrc = rdumpDir;
+            p.log("检测到旧版解包输出结构(rdump/), 自动以 rdump 内容为打包源");
+            p.log("提示: 新版解包输出已改为内容直接在所选目录(无 rdump), 重新解包即可完全按所选目录打包");
+        }
         // 工作目录(输出同级, /sdcard 普通用户可写): 放 App 配置副本 + 转换产物, 用完删除
         File workDir = new File(outImg.getParentFile() != null ? outImg.getParentFile()
                         : new File(System.getProperty("java.io.tmpdir")),
@@ -116,17 +126,17 @@ public final class Ext4Tool {
         File ctxCfg = cfgDir != null ? pickCfg(cfgDir, label, "_contexts") : null;
         File mkeFs = null, mkeCtx = null;
         if (fsCfg != null && ctxCfg != null) {
-            mkeFs = convertFsConfig(fsCfg, workDir, srcDir, mount);
-            mkeCtx = convertContexts(ctxCfg, workDir, srcDir, mount);
+            mkeFs = convertFsConfig(fsCfg, workDir, contentSrc, mount);
+            mkeCtx = convertContexts(ctxCfg, workDir, contentSrc, mount);
         }
 
-        // 2. 移走源目录内 App 生成物(不进入镜像): .imgx_mke 残留 / config / ImgX(解包输出目录,存在即移走) / rdump(debugfs 残留) / __image_size.txt
+        // 2. 移走源目录内 App 生成物(不进入镜像): .imgx_mke 残留 / config / ImgX / __image_size.txt
+        //    (rdump 是内容源, 不移走)
         java.util.List<File> stashed = new ArrayList<>();
         java.util.List<File> candidates = new java.util.ArrayList<>();
         File imgxDir = new File(srcDir, "ImgX");
         if (imgxDir.isDirectory()) candidates.add(imgxDir);
         candidates.add(new File(srcDir, "config"));
-        candidates.add(new File(srcDir, "rdump"));
         candidates.add(new File(srcDir, "__image_size.txt"));
         candidates.add(new File(srcDir, ".imgx_mke"));
         File stashParent = (srcDir.getParentFile() != null) ? srcDir.getParentFile()
@@ -141,7 +151,7 @@ public final class Ext4Tool {
         }
 
         try {
-            packInner(srcDir, outImg, label, tools, p, mkeFs, mkeCtx, workDir, mount);
+            packInner(contentSrc, outImg, label, tools, p, mkeFs, mkeCtx, workDir, mount);
         } finally {
             // 3. 还原源目录 + 清理工作目录
             for (File dst : stashed) {
