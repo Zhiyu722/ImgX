@@ -15,10 +15,10 @@ import java.io.InputStream;
 public final class Binaries {
 
     private static final String[] BINARIES = {
-            "debugfs", "mke2fs", "brotli", "lz4", "magiskboot", "e2fsdroid",
-            "lpmake", "extract.erofs", "make_ext4fs", "payload-dumper-go",
-            // TIK 工具: sparse/erofs 打包 + zstd(无功能引用的 busybox/dtc/delta_generator 已移除, APK 缩小 13MB)
-            "img2simg", "mkfs.erofs", "zstd", "cpio",
+            "debugfs", "mke2fs", "brotli", "magiskboot",
+            "extract.erofs", "make_ext4fs", "payload-dumper-go",
+            // TIK: sparse/erofs 打包(无功能引用的 e2fsdroid/lpmake/lz4/cpio/zstd/busybox/dtc/delta_generator 已移除)
+            "img2simg", "mkfs.erofs",
     };
 
     /** 随包分发的配置文件(也解压到 bin 目录) */
@@ -57,16 +57,12 @@ public final class Binaries {
                 new File(dir, "debugfs"),
                 new File(dir, "mke2fs"),
                 new File(dir, "brotli"),
-                new File(dir, "lz4"),
                 new File(dir, "magiskboot"),
-                new File(dir, "e2fsdroid"),
-                new File(dir, "lpmake"),
                 new File(dir, "extract.erofs"),
                 new File(dir, "make_ext4fs"),
                 new File(dir, "payload-dumper-go"),
                 new File(dir, "img2simg"),
                 new File(dir, "mkfs.erofs"),
-                new File(dir, "zstd"),
                 libDir);
 
         boolean needExtract = versionChanged;

@@ -9,34 +9,26 @@ public class ToolPaths {
     public final File debugfs;
     public final File mke2fs;
     public final File brotli;
-    public final File lz4;
     public final File magiskboot;
-    public final File e2fsdroid;
-    public final File lpmake;
     public final File extractErofs;
     public final File makeExt4fs;
     public final File payloadDumper;
     public final File img2simg;     // TIK: raw → sparse
     public final File mkfsErofs;    // TIK: 目录 → erofs
-    public final File zstd;         // TIK: zstd 解压
     public final File libDir;
 
-    public ToolPaths(File debugfs, File mke2fs, File brotli, File lz4, File magiskboot,
-                     File e2fsdroid, File lpmake, File extractErofs, File makeExt4fs,
-                     File payloadDumper, File img2simg, File mkfsErofs, File zstd, File libDir) {
+    public ToolPaths(File debugfs, File mke2fs, File brotli, File magiskboot,
+                     File extractErofs, File makeExt4fs,
+                     File payloadDumper, File img2simg, File mkfsErofs, File libDir) {
         this.debugfs = debugfs;
         this.mke2fs = mke2fs;
         this.brotli = brotli;
-        this.lz4 = lz4;
         this.magiskboot = magiskboot;
-        this.e2fsdroid = e2fsdroid;
-        this.lpmake = lpmake;
         this.extractErofs = extractErofs;
         this.makeExt4fs = makeExt4fs;
         this.payloadDumper = payloadDumper;
         this.img2simg = img2simg;
         this.mkfsErofs = mkfsErofs;
-        this.zstd = zstd;
         this.libDir = libDir;
     }
 
@@ -49,16 +41,12 @@ public class ToolPaths {
                 new File(prefix + "/bin/debugfs"),
                 new File(prefix + "/bin/mke2fs"),
                 new File(prefix + "/bin/brotli"),
-                new File(prefix + "/bin/lz4"),
                 new File(prefix + "/bin/magiskboot"),
-                new File(prefix + "/bin/e2fsdroid"),
-                new File(prefix + "/bin/lpmake"),
                 new File(prefix + "/bin/extract.erofs"),
                 new File(prefix + "/bin/make_ext4fs"),
                 new File(System.getenv("PDG") != null ? System.getenv("PDG") : "build/tools/payload-dumper-go"),
                 new File(prefix + "/bin/img2simg"),
                 new File(prefix + "/bin/mkfs.erofs"),
-                new File(prefix + "/bin/zstd"),
                 lib);
     }
 
