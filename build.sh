@@ -169,8 +169,8 @@ if [ ! -f "$KSTORE" ]; then
         -dname "CN=ImgX, OU=ImgX, O=zhiyu, C=CN" 2>/dev/null
 fi
 apksigner sign --ks "$KSTORE" --ks-pass "pass:$KSPASS" \
-    --out "$OUT/ImgX-v4.0.0.apk" "$OUT/unsigned.apk"
+    --out "$OUT/ImgX-v4.0.5.apk" "$OUT/unsigned.apk"
 
 echo ""
-echo "APK: $OUT/ImgX-v4.0.0.apk"
-ls -lh "$OUT/ImgX-v4.0.0.apk"
+echo "APK: $OUT/ImgX-v4.0.5.apk"
+ls -lh "$OUT/ImgX-v4.0.5.apk"
