@@ -1341,11 +1341,13 @@ public class MainActivity extends Activity {
                     }
                 }
                 ImgxEngine.unpack(inFile, outDir, autoPartsSw.isChecked(), tt,
-                        uiProgress(unpackLog, "解包"));
+                        uiProgress(unpackLog, "解包", null));
                 final String finalOut = outDir.getAbsolutePath();
                 post(() -> {
                     unpackLog.append("【解包完成】输出目录: " + finalOut);
                     toast("解包完成 ✓");
+                    // 日志落盘: 不依赖悬浮窗, 输出目录旁留一份完整日志
+                    writeLogFile(new File(finalOut, "解包日志.txt"), "解包完成 ✓\n" + unpackLog.text());
                 });
             } catch (Exception e) {
                 post(() -> unpackLog.append("[失败] " + e.getMessage()));
@@ -1374,7 +1376,7 @@ public class MainActivity extends Activity {
             try {
                 if (tools == null) tools = Binaries.ensure(this, null);
                 int fmt = formatSeg.getSelectedIndex();
-                Progress p = uiProgress(packLog, "打包");
+                Progress p = uiProgress(packLog, "打包", out);
                 if (fmt == 0) {
                     ImgxEngine.packExt4(new File(src), new File(out), label, tools, p);
                 } else if (fmt == 1) {
@@ -1390,7 +1392,7 @@ public class MainActivity extends Activity {
         });
     }
 
-    private Progress uiProgress(LogView log, String tag) {
+    private Progress uiProgress(LogView log, String tag, final String outPath) {
         return new Progress() {
             @Override
             public void log(String line) {
@@ -1407,6 +1409,13 @@ public class MainActivity extends Activity {
                 post(() -> {
                     log.append(ok ? "✅ " + message : "❌ " + message);
                     toast(message);   // 同时弹提示, 明确告知完成
+                    // 日志落盘: 输出文件同级留完整日志, 不依赖悬浮窗
+                    if (outPath != null && !outPath.isEmpty()) {
+                        File outF = new File(outPath);
+                        File logFile = new File(outF.getParentFile() != null ? outF.getParentFile() : outF,
+                                "打包日志.txt");
+                        writeLogFile(logFile, (ok ? "✅ " : "❌ ") + message + "\n" + log.text());
+                    }
                 });
             }
         };
@@ -1418,5 +1427,15 @@ public class MainActivity extends Activity {
 
     private void toast(String s) {
         android.widget.Toast.makeText(this, s, android.widget.Toast.LENGTH_LONG).show();
+    }
+
+    /** 把完整日志写入文件(输出目录/输出文件旁), 悬浮窗消失后仍可查。 */
+    private void writeLogFile(File logFile, String content) {
+        try {
+            if (!logFile.getParentFile().exists()) logFile.getParentFile().mkdirs();
+            java.io.FileOutputStream fos = new java.io.FileOutputStream(logFile);
+            fos.write(content.getBytes());
+            fos.close();
+        } catch (Exception ignore) {}
     }
 }

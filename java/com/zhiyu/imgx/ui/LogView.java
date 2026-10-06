@@ -122,4 +122,10 @@ public class LogView extends LinearLayout {
         logText.setText("");
         progressText.setText("0%");
     }
+
+    /** 当前日志全文(供落盘: 打包/解包完成后写入输出目录旁, 不依赖悬浮窗) */
+    public String text() {
+        CharSequence t = logText.getText();
+        return t == null ? "" : t.toString();
+    }
 }
