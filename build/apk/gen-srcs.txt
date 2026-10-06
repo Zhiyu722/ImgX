@@ -1,1 +1,0 @@
-build/gen/com/zhiyu/imgx/R.java
