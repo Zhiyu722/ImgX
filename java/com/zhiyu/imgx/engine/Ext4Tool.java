@@ -211,6 +211,11 @@ public final class Ext4Tool {
             if (tools.makeExt4fs != null && tools.makeExt4fs.isFile()) {
                 try {
                     packMakeExt4fs(srcDir, outImg, mount, size, tools, p, mkeFs, mkeCtx);
+                    // 校验 SELinux 上下文确实写入镜像根(防止静默 unlabeled → 刷入卡第一屏/InitFatalReboot),
+                    // 未写入则抛异常自动转回退方案(e2fsdroid)
+                    if (mkeCtx != null && !verifySelinux(outImg, tools)) {
+                        throw new IOException("SELinux 上下文未写入镜像, 改用回退方案");
+                    }
                     p.log("ext4 镜像已生成(权限已内嵌) → " + outImg.getAbsolutePath());
                     return;
                 } catch (Exception e) {
@@ -224,18 +229,40 @@ public final class Ext4Tool {
                 }
             }
             if (!spaceErr) {
-                // mke2fs 回退(同样带自动扩容)
+                // mke2fs 回退(同样带自动扩容): TIK 方案2 —— mke2fs 空盘 + e2fsdroid 灌内容并写入
+                // 属主/权限/SELinux(debugfs 的 ea_set 写不了 security 命名空间, 必须用 e2fsdroid)
                 try {
-                    p.log("调用 mke2fs 生成 ext4 ...");
-                    List<String> cmd = Exec.cmd(tools.mke2fs.getAbsolutePath(),
-                            "-q", "-t", "ext4", "-b", "4096", "-d", srcDir.getAbsolutePath(),
-                            "-L", label == null || label.isEmpty() ? "ImgX" : label,
-                            outImg.getAbsolutePath(), String.valueOf(size / 4096)); // 块数(4K/块), 传字节会被当成块数导致镜像虚大数 TB
-                    int code = Exec.run(tools.libDir, p, cmd);
-                    if (code != 0) throw new IOException("mke2fs 打包失败 (exit " + code + ")");
-                    // 用解包时导出的 fs_config + SELinux 上下文恢复文件属主与安全上下文
-                    applyConfig(outImg, srcDir, label, tools, p);
-                    p.log("ext4 镜像已生成 → " + outImg.getAbsolutePath());
+                    if (tools.e2fsdroid != null && tools.e2fsdroid.isFile()
+                            && mkeFs != null && mkeCtx != null) {
+                        p.log("调用 mke2fs 生成 ext4 空盘 ...");
+                        List<String> cmd = Exec.cmd(tools.mke2fs.getAbsolutePath(),
+                                "-q", "-O", "^has_journal", "-L", mount, "-I", "256",
+                                "-M", "/" + mount, "-m", "0", "-t", "ext4", "-b", "4096",
+                                outImg.getAbsolutePath(), String.valueOf(size / 4096));
+                        int code = Exec.run(tools.libDir, p, cmd);
+                        if (code != 0) throw new IOException("mke2fs 打包失败 (exit " + code + ")");
+                        p.log("调用 e2fsdroid 写入文件与权限/SELinux ...");
+                        List<String> cmd2 = Exec.cmd(tools.e2fsdroid.getAbsolutePath(),
+                                "-e", "-T", "0",
+                                "-S", mkeCtx.getAbsolutePath(),
+                                "-C", mkeFs.getAbsolutePath(),
+                                "-a", "/" + mount,
+                                "-f", srcDir.getAbsolutePath(),
+                                outImg.getAbsolutePath());
+                        int code2 = Exec.run(tools.libDir, p, cmd2);
+                        if (code2 != 0) throw new IOException("e2fsdroid 写入失败 (exit " + code2 + ")");
+                    } else {
+                        // 无解包配置(手动打包): mke2fs -d 直接灌内容, 尽力恢复属主
+                        p.log("调用 mke2fs 生成 ext4 ...");
+                        List<String> cmd = Exec.cmd(tools.mke2fs.getAbsolutePath(),
+                                "-q", "-t", "ext4", "-b", "4096", "-d", srcDir.getAbsolutePath(),
+                                "-L", label == null || label.isEmpty() ? "ImgX" : label,
+                                outImg.getAbsolutePath(), String.valueOf(size / 4096));
+                        int code = Exec.run(tools.libDir, p, cmd);
+                        if (code != 0) throw new IOException("mke2fs 打包失败 (exit " + code + ")");
+                        applyConfig(outImg, srcDir, label, tools, p);
+                    }
+                    p.log("ext4 镜像已生成(权限/SELinux 已写入) → " + outImg.getAbsolutePath());
                     return;
                 } catch (Exception e) {
                     if (isSpaceError(e.getMessage()) && attempt < 5) {
@@ -261,6 +288,17 @@ public final class Ext4Tool {
         return m.contains("no space") || m.contains("not enough") || m.contains("enospc")
                 || m.contains("space left") || m.contains("too small") || m.contains("larger than")
                 || m.contains("exceeds") || m.contains("extents") || m.contains("capacity");
+    }
+
+    /** 抽查 ext4 根 inode 的 security.selinux, 防止生成看似成功但实际全为 unlabeled 的镜像。 */
+    private static boolean verifySelinux(File img, ToolPaths tools) {
+        try {
+            String out = Exec.capture(tools.libDir, Exec.cmd(
+                    tools.debugfs.getAbsolutePath(), "-R", "stat /", img.getAbsolutePath()));
+            return out != null && out.contains("security.selinux") && out.contains("u:");
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
     // ==================== TIK 式打包: make_ext4fs(权限内嵌, 可直刷) ====================
