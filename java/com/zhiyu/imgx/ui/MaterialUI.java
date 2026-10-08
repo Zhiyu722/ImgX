@@ -12,15 +12,15 @@ import android.widget.TextView;
 
 /**
  * Material 3 风格方框组件工厂(打包/解包页使用; 关于页保留玻璃设计)。
- * 浅紫 #A78BFA, 浅灰紫底 #F8F7FC, 圆角 + 细描边 + 涟漪按压反馈。
+ * 青绿 #14B8A6, 浅灰底 #F7F9F8, 圆角 + 细描边 + 涟漪按压反馈。
  */
 public final class MaterialUI {
 
-    public static final int PRIMARY = 0xFF8B5CF6;       // 浅紫(薰衣草)
-    public static final int PRIMARY_DARK = 0xFF7C3AED;  // 按压态深紫
+    public static final int PRIMARY = 0xFF14B8A6;       // 青绿 Teal
+    public static final int PRIMARY_DARK = 0xFF0D9488;  // 按压态
     public static final int SURFACE = 0xFFFFFFFF;       // 卡片白
     public static final int FIELD_BG = 0xFFF8F7FC;      // 输入框浅灰紫
-    public static final int OUTLINE = 0xFFDCD6EE;       // 描边(淡紫灰)
+    public static final int OUTLINE = 0xFFDCD6EE;       // 描边(淡灰绿)
     public static final int OUTLINE_FOCUS = PRIMARY;    // 聚焦描边
     public static final int TEXT = 0xFF1A1C1E;          // 正文
     public static final int TEXT_SUB = 0xFF6B7280;      // 次要
@@ -71,9 +71,9 @@ public final class MaterialUI {
     /** 次按钮(描边): 透明底蓝字 + 涟漪 */
     public static RippleDrawable outlineBtnBg(Context c) {
         StateListDrawable sd = new StateListDrawable();
-        sd.addState(new int[]{android.R.attr.state_pressed}, round(c, 0x1AA78BFA, PRIMARY, 24));
+        sd.addState(new int[]{android.R.attr.state_pressed}, round(c, 0x1A14B8A6, PRIMARY, 24));
         sd.addState(new int[]{}, round(c, Color.TRANSPARENT, OUTLINE, 24));
-        return new RippleDrawable(ColorStateList.valueOf(0x22A78BFA), sd, null);
+        return new RippleDrawable(ColorStateList.valueOf(0x2214B8A6), sd, null);
     }
 
     /** Material 3 输入框 */
