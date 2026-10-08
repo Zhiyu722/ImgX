@@ -34,6 +34,7 @@ import com.zhiyu.imgx.ui.GlassPager;
 import com.zhiyu.imgx.ui.GlassSwitch;
 import com.zhiyu.imgx.ui.GlassSegmented;
 import com.zhiyu.imgx.ui.LogView;
+import com.zhiyu.imgx.ui.MaterialTrackThumb;
 import com.zhiyu.imgx.util.Binaries;
 
 import java.io.File;
@@ -58,14 +59,14 @@ public class MainActivity extends Activity {
     private EditText inputPathEt;
     private EditText outPathEt;
     private TextView typeLabel;
-    private GlassSwitch autoPartsSw;
+    private android.widget.Switch autoPartsSw;
     private LogView unpackLog;
 
     // 打包页状态
     private EditText packSrcEt;
     private EditText packOutEt;
     private EditText packLabelEt;
-    private GlassSegmented formatSeg;
+    private com.zhiyu.imgx.ui.MaterialSegmented formatSeg;
     private LogView packLog;
 
     private ExecutorService worker = Executors.newSingleThreadExecutor();
@@ -292,15 +293,13 @@ public class MainActivity extends Activity {
         LinearLayout col = pageColumn();
         col.addView(sectionTitle("解包镜像"));
 
-        // 输入文件卡片
-        GlassCard card1 = new GlassCard(this);
-        card1.attachScene(scene);
-        LinearLayout c1 = cardColumn(card1);
+        // 输入文件卡片(Material 3 方框)
+        LinearLayout c1 = materialCard();
         c1.addView(fieldLabel("镜像文件"));
-        inputPathEt = glassEdit();
+        inputPathEt = com.zhiyu.imgx.ui.MaterialUI.edit(this);
         inputPathEt.setHint("点右侧按钮选择, 或直接输入路径(含 /sdcard/...)");
         c1.addView(inputPathEt);
-        GlassButton browseBtn = new GlassButton(this, "浏览", GlassButton.STYLE_GLASS);
+        TextView browseBtn = materialBtn("浏览", true);
         browseBtn.setOnClickListener(v -> pickInputFile());
         c1.addView(browseBtn);
         typeLabel = new TextView(this);
@@ -308,25 +307,21 @@ public class MainActivity extends Activity {
         typeLabel.setTextColor(0xFF6B7280);
         typeLabel.setTextSize(13);
         c1.addView(typeLabel);
-        col.addView(card1, cardLp());
+        col.addView(c1, cardLp());
 
         // 输出目录卡片
-        GlassCard card2 = new GlassCard(this);
-        card2.attachScene(scene);
-        LinearLayout c2 = cardColumn(card2);
+        LinearLayout c2 = materialCard();
         c2.addView(fieldLabel("解包输出目录"));
-        outPathEt = glassEdit();
+        outPathEt = com.zhiyu.imgx.ui.MaterialUI.edit(this);
         outPathEt.setText(Binaries.defaultOutDir(this).getAbsolutePath());
         c2.addView(outPathEt);
-        GlassButton dirBtn = new GlassButton(this, "选择目录", GlassButton.STYLE_GLASS);
+        TextView dirBtn = materialBtn("选择目录", false);
         dirBtn.setOnClickListener(v -> pickOutputDir());
         c2.addView(dirBtn);
-        col.addView(card2, cardLp());
+        col.addView(c2, cardLp());
 
         // 选项卡片
-        GlassCard card3 = new GlassCard(this);
-        card3.attachScene(scene);
-        LinearLayout c3 = cardColumn(card3);
+        LinearLayout c3 = materialCard();
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
         TextView tv = new TextView(this);
@@ -334,11 +329,11 @@ public class MainActivity extends Activity {
         tv.setTextColor(0xFF14191C);
         tv.setTextSize(15);
         row.addView(tv, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-        autoPartsSw = new GlassSwitch(this);
+        autoPartsSw = materialSwitch();
         autoPartsSw.setChecked(true);
         row.addView(autoPartsSw);
         c3.addView(row);
-        col.addView(card3, cardLp());
+        col.addView(c3, cardLp());
 
         unpackLog = new LogView(this);
         unpackLog.setVisibility(View.GONE);
@@ -353,44 +348,36 @@ public class MainActivity extends Activity {
         LinearLayout col = pageColumn();
         col.addView(sectionTitle("打包镜像"));
 
-        GlassCard card1 = new GlassCard(this);
-        card1.attachScene(scene);
-        LinearLayout c1 = cardColumn(card1);
+        LinearLayout c1 = materialCard();
         c1.addView(fieldLabel("源目录(解包产物 / 要打包的文件夹)"));
-        packSrcEt = glassEdit();
+        packSrcEt = com.zhiyu.imgx.ui.MaterialUI.edit(this);
         packSrcEt.setHint("选择或输入目录路径");
         c1.addView(packSrcEt);
-        GlassButton b1 = new GlassButton(this, "选择目录", GlassButton.STYLE_GLASS);
+        TextView b1 = materialBtn("选择目录", true);
         b1.setOnClickListener(v -> pickPackSrc());
         c1.addView(b1);
-        col.addView(card1, cardLp());
+        col.addView(c1, cardLp());
 
-        GlassCard card2 = new GlassCard(this);
-        card2.attachScene(scene);
-        LinearLayout c2 = cardColumn(card2);
+        LinearLayout c2 = materialCard();
         c2.addView(fieldLabel("输出文件"));
-        packOutEt = glassEdit();
+        packOutEt = com.zhiyu.imgx.ui.MaterialUI.edit(this);
         packOutEt.setHint("例如 /sdcard/ImgX/out/system.img");
         c2.addView(packOutEt);
-        GlassButton b2 = new GlassButton(this, "浏览保存位置", GlassButton.STYLE_GLASS);
+        TextView b2 = materialBtn("浏览保存位置", false);
         b2.setOnClickListener(v -> pickPackOut());
         c2.addView(b2);
         c2.addView(fieldLabel("ext4 卷标(可选)"));
-        packLabelEt = glassEdit();
+        packLabelEt = com.zhiyu.imgx.ui.MaterialUI.edit(this);
         packLabelEt.setHint("system / vendor ...");
         c2.addView(packLabelEt);
-        col.addView(card2, cardLp());
+        col.addView(c2, cardLp());
 
-        GlassCard card3 = new GlassCard(this);
-        card3.attachScene(scene);
-        LinearLayout c3 = cardColumn(card3);
+        LinearLayout c3 = materialCard();
         c3.addView(fieldLabel("输出格式"));
-        formatSeg = new GlassSegmented(this, new String[]{"ext4", "sparse", "erofs", "boot"});
-        formatSeg.setInstantMode(true);   // 卡片内单选: 点选即停, 不跑玻璃弹簧动画(防闪烁)
-        formatSeg.attachScene(scene);
+        formatSeg = new com.zhiyu.imgx.ui.MaterialSegmented(this, new String[]{"ext4", "sparse", "erofs", "boot"});
         c3.addView(formatSeg, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, (int) dp(44)));
-        col.addView(card3, cardLp());
+        col.addView(c3, cardLp());
 
         packLog = new LogView(this);
         packLog.setVisibility(View.GONE);
@@ -507,6 +494,51 @@ public class MainActivity extends Activity {
         c.setPadding((int) dp(18), (int) dp(10), (int) dp(18), (int) dp(10));
         card.addView(c);
         return c;
+    }
+
+    // ---------------- Material 3 方框组件(打包/解包页; 关于页仍用玻璃) ----------------
+
+    /** Material 3 卡片: 白底圆角 16 + 淡描边, 自带内边距 */
+    private LinearLayout materialCard() {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setBackground(com.zhiyu.imgx.ui.MaterialUI.cardBg(this));
+        card.setPadding((int) dp(18), (int) dp(14), (int) dp(18), (int) dp(14));
+        return card;
+    }
+
+    /** Material 3 按钮: primary=填充主题蓝胶囊, 否则描边次按钮 */
+    private TextView materialBtn(String text, boolean primary) {
+        TextView btn = new TextView(this);
+        btn.setText(text);
+        btn.setTextSize(15);
+        btn.setGravity(Gravity.CENTER);
+        btn.setSingleLine(true);
+        btn.setClickable(true);
+        btn.setFocusable(true);
+        int padV = (int) dp(12);
+        btn.setPadding((int) dp(20), padV, (int) dp(20), padV);
+        if (primary) {
+            btn.setTextColor(0xFFFFFFFF);
+            btn.setTypeface(android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD));
+            btn.setBackground(com.zhiyu.imgx.ui.MaterialUI.filledBtnBg(this));
+        } else {
+            btn.setTextColor(com.zhiyu.imgx.ui.MaterialUI.PRIMARY);
+            btn.setBackground(com.zhiyu.imgx.ui.MaterialUI.outlineBtnBg(this));
+        }
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = (int) dp(4);
+        btn.setLayoutParams(lp);
+        return btn;
+    }
+
+    /** Material 3 开关: 蓝/灰轨道 + 白色圆钮 */
+    private android.widget.Switch materialSwitch() {
+        android.widget.Switch sw = new android.widget.Switch(this);
+        sw.setTrackDrawable(MaterialTrackThumb.track(this));
+        sw.setThumbDrawable(MaterialTrackThumb.thumb(this));
+        return sw;
     }
 
     /**
