@@ -145,7 +145,7 @@ public class MainActivity extends Activity {
         brand.setText("ImgX");
         brand.setTextSize(18);
         brand.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        brand.setTextColor(0xFF14B8A6);
+        brand.setTextColor(0xFF374151);
         LinearLayout.LayoutParams brLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         brLp.leftMargin = (int) dp(8);
@@ -423,14 +423,14 @@ public class MainActivity extends Activity {
         c1.addView(ver);
         TextView author = new TextView(this);
         author.setText("作者: Zhiyu · cuoxianxu");
-        author.setTextColor(0xFF14B8A6);
+        author.setTextColor(0xFF374151);
         author.setTextSize(13);
         author.setGravity(Gravity.CENTER);
         author.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         c1.addView(author);
         engineStatus = new TextView(this);
         engineStatus.setText("引擎: 初始化中 ...");
-        engineStatus.setTextColor(0xFF14B8A6);
+        engineStatus.setTextColor(0xFF374151);
         engineStatus.setTextSize(13);
         engineStatus.setGravity(Gravity.CENTER);
         c1.addView(engineStatus);
@@ -596,7 +596,7 @@ public class MainActivity extends Activity {
         moreHint.setBackground(hintBg);
         TextView arrowTv = new TextView(this);
         arrowTv.setText("▼ 继续下滑");
-        arrowTv.setTextColor(0xFF14B8A6);
+        arrowTv.setTextColor(0xFF374151);
         arrowTv.setTextSize(12);
         arrowTv.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         moreHint.addView(arrowTv);
@@ -651,7 +651,7 @@ public class MainActivity extends Activity {
         View bar = new View(this);
         android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable(
                 android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
-                new int[]{0xFF14B8A6, 0xFF14B8A6, 0xFF14B8A6});
+                new int[]{0xFF374151, 0xFF374151, 0xFF374151});
         gd.setCornerRadius(dp(4));
         bar.setBackground(gd);
         bar.setElevation(dp(2));
@@ -707,7 +707,7 @@ public class MainActivity extends Activity {
         for (String it : items) {
             TextView chip = new TextView(this);
             chip.setText(it);
-            chip.setTextColor(0xFF14B8A6);
+            chip.setTextColor(0xFF374151);
             chip.setTextSize(13);
             chip.setGravity(Gravity.CENTER);
             chip.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
@@ -841,7 +841,7 @@ public class MainActivity extends Activity {
         btn.setPadding((int) dp(14), (int) dp(8), (int) dp(14), (int) dp(8));
         android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable();
         gd.setCornerRadius(dp(16));
-        gd.setColor(0xFF14B8A6);
+        gd.setColor(0xFF374151);
         btn.setBackground(gd);
         btn.setOnClickListener(v -> {
             try {
@@ -930,7 +930,7 @@ public class MainActivity extends Activity {
             // 上一级
             File parent = d.getParentFile();
             if (parent != null) {
-                android.widget.TextView up = browserRow("⬆  ..  上一级", 0xFF14B8A6);
+                android.widget.TextView up = browserRow("⬆  ..  上一级", 0xFF374151);
                 up.setOnClickListener(v -> { cur[0] = parent; refresh[0].run(); });
                 list.addView(up);
             }
@@ -960,7 +960,7 @@ public class MainActivity extends Activity {
                             || n.endsWith(".gz") || n.endsWith(".lz4") || n.endsWith(".raw");
                     android.widget.TextView tv = browserRow(
                             (interesting ? "📦  " : "📄  ") + n + "   " + (f.length() / 1048576) + "MB",
-                            interesting ? 0xFF14B8A6 : 0xFF6B7280);
+                            interesting ? 0xFF374151 : 0xFF6B7280);
                     final File ff = f;
                     tv.setOnClickListener(v -> {
                         dlg.dismiss();
@@ -1024,7 +1024,7 @@ public class MainActivity extends Activity {
             title.setText(d.getAbsolutePath());
             File parent = d.getParentFile();
             if (parent != null) {
-                android.widget.TextView up = browserRow("⬆  ..  上一级", 0xFF14B8A6);
+                android.widget.TextView up = browserRow("⬆  ..  上一级", 0xFF374151);
                 up.setOnClickListener(v -> { cur[0] = parent; refresh[0].run(); });
                 list.addView(up);
             }
@@ -1253,7 +1253,7 @@ public class MainActivity extends Activity {
             } catch (Exception e) {
                 typeLabel.setText("已选择 SAF 文件, 解包时自动复制处理");
             }
-            typeLabel.setTextColor(0xFF14B8A6);
+            typeLabel.setTextColor(0xFF374151);
             return;
         }
         File f = new File(path);
@@ -1265,7 +1265,7 @@ public class MainActivity extends Activity {
         com.zhiyu.imgx.engine.ImgType.Type t = com.zhiyu.imgx.engine.ImgType.detect(f);
         typeLabel.setText("识别类型: " + com.zhiyu.imgx.engine.ImgType.label(t)
                 + "  ·  " + (f.length() / 1048576) + " MB");
-        typeLabel.setTextColor(0xFF14B8A6);
+        typeLabel.setTextColor(0xFF374151);
     }
 
     /** 从字节流头识别镜像类型(SAF 文件用) */
