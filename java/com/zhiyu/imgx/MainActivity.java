@@ -59,7 +59,6 @@ public class MainActivity extends Activity {
     private EditText inputPathEt;
     private EditText outPathEt;
     private TextView typeLabel;
-    private android.widget.Switch autoPartsSw;
     private LogView unpackLog;
 
     // 打包页状态
@@ -328,21 +327,6 @@ public class MainActivity extends Activity {
         c2.addView(dirBtn);
         col.addView(c2, cardLp());
 
-        // 选项卡片
-        LinearLayout c3 = materialCard();
-        LinearLayout row = new LinearLayout(this);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        TextView tv = new TextView(this);
-        tv.setText("自动解包 payload/super 分区(耗时更长)");
-        tv.setTextColor(0xFF14191C);
-        tv.setTextSize(15);
-        row.addView(tv, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-        autoPartsSw = materialSwitch();
-        autoPartsSw.setChecked(true);
-        row.addView(autoPartsSw);
-        c3.addView(row);
-        col.addView(c3, cardLp());
-
         unpackLog = new LogView(this);
         unpackLog.setVisibility(View.GONE);
         col.addView(unpackLog, logLp());
@@ -531,12 +515,13 @@ public class MainActivity extends Activity {
             btn.setTypeface(android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD));
             btn.setBackground(com.zhiyu.imgx.ui.MaterialUI.filledBtnBg(this));
         } else {
-            btn.setTextColor(com.zhiyu.imgx.ui.MaterialUI.PRIMARY);
+            btn.setTextColor(0xFF374151);
+            btn.setTypeface(android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD));
             btn.setBackground(com.zhiyu.imgx.ui.MaterialUI.outlineBtnBg(this));
         }
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        lp.topMargin = (int) dp(4);
+        lp.topMargin = (int) dp(12);
         btn.setLayoutParams(lp);
         return btn;
     }
@@ -1351,7 +1336,7 @@ public class MainActivity extends Activity {
                         outDir = fallback;
                     }
                 }
-                ImgxEngine.unpack(inFile, outDir, autoPartsSw.isChecked(), tt,
+                ImgxEngine.unpack(inFile, outDir, true, tt,
                         uiProgress(unpackLog, "解包", null));
                 final String finalOut = outDir.getAbsolutePath();
                 post(() -> {

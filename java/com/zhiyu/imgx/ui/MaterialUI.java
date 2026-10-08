@@ -68,11 +68,11 @@ public final class MaterialUI {
         return sd;
     }
 
-    /** 次按钮(描边): 透明底主题色字, 按压淡色填充 */
+    /** 次按钮(浅灰填充): 不再透明, 视觉实心 */
     public static StateListDrawable outlineBtnBg(Context c) {
         StateListDrawable sd = new StateListDrawable();
-        sd.addState(new int[]{android.R.attr.state_pressed}, round(c, 0x1A374151, PRIMARY, 24));
-        sd.addState(new int[]{}, round(c, Color.TRANSPARENT, OUTLINE, 24));
+        sd.addState(new int[]{android.R.attr.state_pressed}, round(c, 0xFFE1E4E8, 0, 24));
+        sd.addState(new int[]{}, round(c, 0xFFF3F4F6, 0, 24));
         return sd;
     }
 
