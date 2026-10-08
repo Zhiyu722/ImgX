@@ -35,7 +35,7 @@ public class LogView extends LinearLayout {
         barBox.setBackground(rounded(0x33FFFFFF, 0x66FFFFFF, 6 * density));
         android.widget.FrameLayout bar = new android.widget.FrameLayout(context);
         progressFill = new GradientDrawable();
-        progressFill.setColor(0xFF169AFF);
+        progressFill.setColor(0xFFA78BFA);
         progressFill.setCornerRadius(6 * density);
         progressFill.setBounds(0, 0, 0, 0);
         android.view.View fillView = new android.view.View(context) {
@@ -49,7 +49,7 @@ public class LogView extends LinearLayout {
                 0, android.widget.FrameLayout.LayoutParams.MATCH_PARENT, 1));
         barBox.addView(bar, new LinearLayout.LayoutParams(0, (int) (6 * density), 1));
         progressText = new TextView(context);
-        progressText.setTextColor(0xFF169AFF);
+        progressText.setTextColor(0xFFA78BFA);
         progressText.setTextSize(12);
         progressText.setText("0%");
         progressText.setGravity(android.view.Gravity.CENTER_VERTICAL);

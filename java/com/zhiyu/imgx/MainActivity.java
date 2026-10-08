@@ -51,7 +51,7 @@ public class MainActivity extends Activity {
     private DotIndicator dots;
     private GlassSegmented topTabs;
     private LinearLayout actionBar;    // 底部固定动作栏(开始解包/打包, 便利)
-    private GlassButton actionBtn;
+    private TextView actionBtn;
     private TextView permHint;
     private GlassButton permBtn;
 
@@ -145,7 +145,7 @@ public class MainActivity extends Activity {
         brand.setText("ImgX");
         brand.setTextSize(18);
         brand.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        brand.setTextColor(0xFF169AFF);
+        brand.setTextColor(0xFFA78BFA);
         LinearLayout.LayoutParams brLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         brLp.leftMargin = (int) dp(8);
@@ -230,7 +230,15 @@ public class MainActivity extends Activity {
         actionBar = new LinearLayout(this);
         actionBar.setOrientation(LinearLayout.VERTICAL);
         actionBar.setPadding((int) dp(20), 0, (int) dp(20), 0);
-        actionBtn = new GlassButton(this, "开始解包", GlassButton.STYLE_PRIMARY);
+        actionBtn = new TextView(this);
+        actionBtn.setText("开始解包");
+        actionBtn.setTextSize(16);
+        actionBtn.setGravity(Gravity.CENTER);
+        actionBtn.setTextColor(0xFFFFFFFF);
+        actionBtn.setTypeface(android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD));
+        actionBtn.setClickable(true);
+        actionBtn.setFocusable(true);
+        actionBtn.setBackground(com.zhiyu.imgx.ui.MaterialUI.filledBtnBg(this));
         actionBar.addView(actionBtn, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, (int) dp(52)));
         FrameLayout.LayoutParams abLp = new FrameLayout.LayoutParams(
@@ -415,14 +423,14 @@ public class MainActivity extends Activity {
         c1.addView(ver);
         TextView author = new TextView(this);
         author.setText("作者: Zhiyu · cuoxianxu");
-        author.setTextColor(0xFF169AFF);
+        author.setTextColor(0xFFA78BFA);
         author.setTextSize(13);
         author.setGravity(Gravity.CENTER);
         author.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         c1.addView(author);
         engineStatus = new TextView(this);
         engineStatus.setText("引擎: 初始化中 ...");
-        engineStatus.setTextColor(0xFF169AFF);
+        engineStatus.setTextColor(0xFFA78BFA);
         engineStatus.setTextSize(13);
         engineStatus.setGravity(Gravity.CENTER);
         c1.addView(engineStatus);
@@ -588,7 +596,7 @@ public class MainActivity extends Activity {
         moreHint.setBackground(hintBg);
         TextView arrowTv = new TextView(this);
         arrowTv.setText("▼ 继续下滑");
-        arrowTv.setTextColor(0xFF169AFF);
+        arrowTv.setTextColor(0xFFA78BFA);
         arrowTv.setTextSize(12);
         arrowTv.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         moreHint.addView(arrowTv);
@@ -617,7 +625,7 @@ public class MainActivity extends Activity {
     private FrameLayout.LayoutParams cardLp() {
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT);
-        lp.bottomMargin = (int) dp(6);
+        lp.bottomMargin = (int) dp(18);
         return lp;
     }
 
@@ -643,7 +651,7 @@ public class MainActivity extends Activity {
         View bar = new View(this);
         android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable(
                 android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
-                new int[]{0xFF64C6FF, 0xFF169AFF, 0xFF9C6BFF});
+                new int[]{0xFFC4B5FD, 0xFFA78BFA, 0xFF8B5CF6});
         gd.setCornerRadius(dp(4));
         bar.setBackground(gd);
         bar.setElevation(dp(2));
@@ -699,7 +707,7 @@ public class MainActivity extends Activity {
         for (String it : items) {
             TextView chip = new TextView(this);
             chip.setText(it);
-            chip.setTextColor(0xFF007FFF);
+            chip.setTextColor(0xFFA78BFA);
             chip.setTextSize(13);
             chip.setGravity(Gravity.CENTER);
             chip.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
@@ -833,7 +841,7 @@ public class MainActivity extends Activity {
         btn.setPadding((int) dp(14), (int) dp(8), (int) dp(14), (int) dp(8));
         android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable();
         gd.setCornerRadius(dp(16));
-        gd.setColor(0xFF007FFF);
+        gd.setColor(0xFFA78BFA);
         btn.setBackground(gd);
         btn.setOnClickListener(v -> {
             try {
@@ -862,15 +870,9 @@ public class MainActivity extends Activity {
 
     // ================= 文件选择 =================
 
-    /** 浏览: 弹选择方式(系统文件选择器 / 内置浏览器) */
+    /** 浏览: 直接用系统文件选择器 */
     private void pickInputFile() {
-        new android.app.AlertDialog.Builder(this)
-                .setTitle("选择文件")
-                .setItems(new String[]{"系统文件选择器", "内置文件浏览器(推荐, 路径更准)"}, (d, w) -> {
-                    if (w == 0) pickInputFileSystem();
-                    else pickInputFileBuiltIn();
-                })
-                .show();
+        pickInputFileSystem();
     }
 
     /** 系统文件选择器(SAF) */
@@ -928,7 +930,7 @@ public class MainActivity extends Activity {
             // 上一级
             File parent = d.getParentFile();
             if (parent != null) {
-                android.widget.TextView up = browserRow("⬆  ..  上一级", 0xFF007FFF);
+                android.widget.TextView up = browserRow("⬆  ..  上一级", 0xFFA78BFA);
                 up.setOnClickListener(v -> { cur[0] = parent; refresh[0].run(); });
                 list.addView(up);
             }
@@ -958,7 +960,7 @@ public class MainActivity extends Activity {
                             || n.endsWith(".gz") || n.endsWith(".lz4") || n.endsWith(".raw");
                     android.widget.TextView tv = browserRow(
                             (interesting ? "📦  " : "📄  ") + n + "   " + (f.length() / 1048576) + "MB",
-                            interesting ? 0xFF007FFF : 0xFF6B7280);
+                            interesting ? 0xFFA78BFA : 0xFF6B7280);
                     final File ff = f;
                     tv.setOnClickListener(v -> {
                         dlg.dismiss();
@@ -985,21 +987,10 @@ public class MainActivity extends Activity {
     }
 
     private void pickOutputDir() {
-        new android.app.AlertDialog.Builder(this)
-                .setTitle("选择输出目录")
-                .setItems(new String[]{"系统目录选择器", "内置目录浏览器(推荐)"}, (d, w) -> {
-                    if (w == 0) {
-                        try {
-                            startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE),
-                                    REQ_OUTPUT_DIR);
-                        } catch (Exception e) { toast("无法打开目录选择器"); }
-                    } else {
-                        showDirBrowser(Environment.getExternalStorageDirectory(), dir -> {
-                            if (dir != null) outPathEt.setText(dir.getAbsolutePath());
-                        });
-                    }
-                })
-                .show();
+        try {
+            startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE),
+                    REQ_OUTPUT_DIR);
+        } catch (Exception e) { toast("无法打开目录选择器"); }
     }
 
     /** 内置目录浏览器: 只选目录。 */
@@ -1033,7 +1024,7 @@ public class MainActivity extends Activity {
             title.setText(d.getAbsolutePath());
             File parent = d.getParentFile();
             if (parent != null) {
-                android.widget.TextView up = browserRow("⬆  ..  上一级", 0xFF007FFF);
+                android.widget.TextView up = browserRow("⬆  ..  上一级", 0xFFA78BFA);
                 up.setOnClickListener(v -> { cur[0] = parent; refresh[0].run(); });
                 list.addView(up);
             }
@@ -1053,31 +1044,14 @@ public class MainActivity extends Activity {
     }
 
     private void pickPackSrc() {
-        new android.app.AlertDialog.Builder(this)
-                .setTitle("选择源目录")
-                .setItems(new String[]{"系统目录选择器", "内置目录浏览器(推荐)"}, (d, w) -> {
-                    if (w == 0) {
-                        try {
-                            startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE),
-                                    REQ_OUTPUT_DIR + 10);
-                        } catch (Exception e) { toast("无法打开目录选择器"); }
-                    } else {
-                        showDirBrowser(Environment.getExternalStorageDirectory(), dir -> {
-                            if (dir != null) packSrcEt.setText(dir.getAbsolutePath());
-                        });
-                    }
-                })
-                .show();
+        try {
+            startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE),
+                    REQ_OUTPUT_DIR + 10);
+        } catch (Exception e) { toast("无法打开目录选择器"); }
     }
 
     private void pickPackOut() {
-        new android.app.AlertDialog.Builder(this)
-                .setTitle("选择输出文件")
-                .setItems(new String[]{"系统保存对话框", "内置(选目录+输文件名)"}, (d, w) -> {
-                    if (w == 0) pickPackOutLegacy();
-                    else pickPackOutBuiltIn();
-                })
-                .show();
+        pickPackOutLegacy();
     }
 
     private void pickPackOutBuiltIn() {
@@ -1279,7 +1253,7 @@ public class MainActivity extends Activity {
             } catch (Exception e) {
                 typeLabel.setText("已选择 SAF 文件, 解包时自动复制处理");
             }
-            typeLabel.setTextColor(0xFF007FFF);
+            typeLabel.setTextColor(0xFFA78BFA);
             return;
         }
         File f = new File(path);
@@ -1291,7 +1265,7 @@ public class MainActivity extends Activity {
         com.zhiyu.imgx.engine.ImgType.Type t = com.zhiyu.imgx.engine.ImgType.detect(f);
         typeLabel.setText("识别类型: " + com.zhiyu.imgx.engine.ImgType.label(t)
                 + "  ·  " + (f.length() / 1048576) + " MB");
-        typeLabel.setTextColor(0xFF007FFF);
+        typeLabel.setTextColor(0xFFA78BFA);
     }
 
     /** 从字节流头识别镜像类型(SAF 文件用) */
