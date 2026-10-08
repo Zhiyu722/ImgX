@@ -150,7 +150,7 @@ public class MainActivity extends Activity {
         brLp.leftMargin = (int) dp(8);
         brandRow.addView(brand, brLp);
         TextView brandVer = new TextView(this);
-        brandVer.setText("v4.0.0");
+        brandVer.setText("v" + versionName());
         brandVer.setTextSize(12);
         brandVer.setTextColor(0xFF7A8794);
         LinearLayout.LayoutParams verLp = new LinearLayout.LayoutParams(
@@ -421,7 +421,7 @@ public class MainActivity extends Activity {
         title.setGravity(Gravity.CENTER);
         c1.addView(title);
         TextView ver = new TextView(this);
-        ver.setText("版本 4.0.0  ·  包名 com.zhiyu.imgx");
+        ver.setText("版本 " + versionName() + "  ·  包名 com.zhiyu.imgx");
         ver.setTextColor(0xFF6B7280);
         ver.setTextSize(12);
         ver.setGravity(Gravity.CENTER);
@@ -1427,6 +1427,15 @@ public class MainActivity extends Activity {
 
     private void toast(String s) {
         android.widget.Toast.makeText(this, s, android.widget.Toast.LENGTH_LONG).show();
+    }
+
+    /** 当前版本名(动态读取, UI 顶部/关于页与清单自动同步, 不再硬编码) */
+    private String versionName() {
+        try {
+            return getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (Exception e) {
+            return "0.0.0";
+        }
     }
 
     /** 把完整日志写入文件(输出目录/输出文件旁), 悬浮窗消失后仍可查。 */
