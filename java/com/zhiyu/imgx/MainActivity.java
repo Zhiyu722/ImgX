@@ -541,11 +541,16 @@ public class MainActivity extends Activity {
         return btn;
     }
 
-    /** Material 3 开关: 蓝/灰轨道 + 白色圆钮 */
+    /** Material 3 开关: 黑/灰轨道 + 白色圆钮, 缩小到 46x26dp 与卡片协调 */
     private android.widget.Switch materialSwitch() {
         android.widget.Switch sw = new android.widget.Switch(this);
         sw.setTrackDrawable(MaterialTrackThumb.track(this));
         sw.setThumbDrawable(MaterialTrackThumb.thumb(this));
+        android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(
+                (int) dp(46), (int) dp(26));
+        sw.setLayoutParams(lp);
+        sw.setMinimumWidth(0);
+        sw.setMinimumHeight(0);
         return sw;
     }
 
