@@ -59,21 +59,21 @@ public final class MaterialUI {
         return sd;
     }
 
-    /** 主按钮(填充): 主题蓝胶囊 + 涟漪 */
-    public static RippleDrawable filledBtnBg(Context c) {
+    /** 主按钮(填充): 主题色胶囊, 按压变深(纯 StateListDrawable, 兼容所有版本) */
+    public static StateListDrawable filledBtnBg(Context c) {
         StateListDrawable sd = new StateListDrawable();
         sd.addState(new int[]{android.R.attr.state_pressed}, round(c, PRIMARY_DARK, 0, 24));
         sd.addState(new int[]{android.R.attr.state_enabled}, round(c, PRIMARY, 0, 24));
-        sd.addState(new int[]{}, round(c, 0xFFB3DCF5, 0, 24));
-        return new RippleDrawable(ColorStateList.valueOf(0x33FFFFFF), sd, null);
+        sd.addState(new int[]{}, round(c, 0xFFC9CDD3, 0, 24));   // 禁用态浅灰
+        return sd;
     }
 
-    /** 次按钮(描边): 透明底蓝字 + 涟漪 */
-    public static RippleDrawable outlineBtnBg(Context c) {
+    /** 次按钮(描边): 透明底主题色字, 按压淡色填充 */
+    public static StateListDrawable outlineBtnBg(Context c) {
         StateListDrawable sd = new StateListDrawable();
         sd.addState(new int[]{android.R.attr.state_pressed}, round(c, 0x1A374151, PRIMARY, 24));
         sd.addState(new int[]{}, round(c, Color.TRANSPARENT, OUTLINE, 24));
-        return new RippleDrawable(ColorStateList.valueOf(0x22374151), sd, null);
+        return sd;
     }
 
     /** Material 3 输入框 */
