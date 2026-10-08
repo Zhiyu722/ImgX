@@ -16,8 +16,8 @@ import android.widget.TextView;
  */
 public final class MaterialUI {
 
-    public static final int PRIMARY = 0xFFA78BFA;       // 浅紫(薰衣草)
-    public static final int PRIMARY_DARK = 0xFF8B5CF6;  // 按压态深紫
+    public static final int PRIMARY = 0xFF8B5CF6;       // 浅紫(薰衣草)
+    public static final int PRIMARY_DARK = 0xFF7C3AED;  // 按压态深紫
     public static final int SURFACE = 0xFFFFFFFF;       // 卡片白
     public static final int FIELD_BG = 0xFFF8F7FC;      // 输入框浅灰紫
     public static final int OUTLINE = 0xFFDCD6EE;       // 描边(淡紫灰)
@@ -85,7 +85,12 @@ public final class MaterialUI {
         et.setHintTextColor(TEXT_SUB);
         et.setSingleLine(true);
         int pad = (int) dp(c, 14);
-        et.setPadding(pad, (int) dp(c, 10), pad, (int) dp(c, 10));
+        et.setPadding(pad, (int) dp(c, 12), pad, (int) dp(c, 12));
+        android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.bottomMargin = (int) dp(c, 14);
+        et.setLayoutParams(lp);
         return et;
     }
 
