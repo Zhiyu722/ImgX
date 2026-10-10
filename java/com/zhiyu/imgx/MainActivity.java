@@ -61,6 +61,12 @@ public class MainActivity extends Activity {
     private TextView typeLabel;
     private LogView unpackLog;
 
+    // 心跳计时(打包/解包进行中每 5 秒汇报已用时, 界面不再"卡着"无反馈)
+    private final android.os.Handler uiHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private Runnable heartRunnable;
+    private long heartStartMs;
+    private LogView heartLog;
+
     // 打包页状态
     private EditText packSrcEt;
     private EditText packOutEt;
@@ -1301,6 +1307,8 @@ public class MainActivity extends Activity {
         if (out.isEmpty()) { toast("请设置输出目录"); return; }
         unpackLog.setVisibility(View.VISIBLE);
         unpackLog.clear();
+        unpackLog.append("准备解包…");
+        startHeart(unpackLog, "解包");
         final ToolPaths t = tools;
         final String inPath = input;
         worker.execute(() -> {
@@ -1340,13 +1348,19 @@ public class MainActivity extends Activity {
                         uiProgress(unpackLog, "解包", null));
                 final String finalOut = outDir.getAbsolutePath();
                 post(() -> {
+                    stopHeart();
                     unpackLog.append("【解包完成】输出目录: " + finalOut);
                     toast("解包完成 ✓");
                     // 日志落盘: 不依赖悬浮窗, 输出目录旁留一份完整日志
                     writeLogFile(new File(finalOut, "解包日志.txt"), "解包完成 ✓\n" + unpackLog.text());
                 });
             } catch (Exception e) {
-                post(() -> unpackLog.append("[失败] " + e.getMessage()));
+                post(() -> {
+                    stopHeart();
+                    unpackLog.append("[失败] " + e.getMessage());
+                    writeLogFile(new File(Binaries.defaultOutDir(MainActivity.this), "解包日志.txt"),
+                            "[失败] " + e.getMessage() + "\n" + unpackLog.text());
+                });
                 try {
                     java.io.StringWriter sw = new java.io.StringWriter();
                     e.printStackTrace(new java.io.PrintWriter(sw));
@@ -1368,6 +1382,8 @@ public class MainActivity extends Activity {
         if (out.isEmpty()) { toast("请设置输出文件"); return; }
         packLog.setVisibility(View.VISIBLE);
         packLog.clear();
+        packLog.append("准备打包…");
+        startHeart(packLog, "打包");
         worker.execute(() -> {
             try {
                 if (tools == null) tools = Binaries.ensure(this, null);
@@ -1383,7 +1399,14 @@ public class MainActivity extends Activity {
                     ImgxEngine.packBoot(new File(src), new File(out), tools, p);
                 }
             } catch (Exception e) {
-                post(() -> packLog.append("[失败] " + e.getMessage()));
+                post(() -> {
+                    stopHeart();
+                    packLog.append("[失败] " + e.getMessage());
+                    toast("打包失败: " + e.getMessage());
+                    File outF = new File(out);
+                    writeLogFile(new File(outF.getParentFile() != null ? outF.getParentFile() : outF,
+                            "打包日志.txt"), "[失败] " + e.getMessage() + "\n" + packLog.text());
+                });
             }
         });
     }
@@ -1423,6 +1446,32 @@ public class MainActivity extends Activity {
 
     private void toast(String s) {
         android.widget.Toast.makeText(this, s, android.widget.Toast.LENGTH_LONG).show();
+    }
+
+    /** 开始心跳: 每 5 秒在日志区显示已用时(大镜像打包/解包需数分钟, 避免像卡死) */
+    private void startHeart(LogView log, String tag) {
+        stopHeart();
+        heartLog = log;
+        heartStartMs = System.currentTimeMillis();
+        heartRunnable = new Runnable() {
+            @Override public void run() {
+                long s = (System.currentTimeMillis() - heartStartMs) / 1000;
+                if (heartLog != null) {
+                    heartLog.append("⏳ " + tag + "进行中… 已用时 " + s + " 秒(大镜像需数分钟, 请耐心等待)");
+                    uiHandler.postDelayed(this, 5000);
+                }
+            }
+        };
+        uiHandler.postDelayed(heartRunnable, 5000);
+    }
+
+    /** 停止心跳 */
+    private void stopHeart() {
+        if (heartRunnable != null) {
+            uiHandler.removeCallbacks(heartRunnable);
+            heartRunnable = null;
+        }
+        heartLog = null;
     }
 
     /** 当前版本名(动态读取, UI 顶部/关于页与清单自动同步, 不再硬编码) */
