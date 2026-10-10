@@ -213,7 +213,7 @@ public final class Ext4Tool {
                     packMakeExt4fs(srcDir, outImg, mount, size, tools, p, mkeFs, mkeCtx);
                     // 校验 SELinux 上下文确实写入镜像根(防止静默 unlabeled → 刷入卡第一屏/InitFatalReboot),
                     // 未写入则抛异常自动转回退方案(e2fsdroid)
-                    if (mkeCtx != null && !verifySelinux(outImg, tools)) {
+                    if (!verifySelinux(outImg, tools, srcDir, mount)) {
                         throw new IOException("SELinux 上下文未写入镜像, 改用回退方案");
                     }
                     p.log("ext4 镜像已生成(权限已内嵌) → " + outImg.getAbsolutePath());
@@ -262,6 +262,10 @@ public final class Ext4Tool {
                         if (code != 0) throw new IOException("mke2fs 打包失败 (exit " + code + ")");
                         applyConfig(outImg, srcDir, label, tools, p);
                     }
+                    // 回退路径同样全量校验 SELinux(根+深层子文件), 不过关不交付
+                    if (mkeCtx != null && !verifySelinux(outImg, tools, srcDir, mount)) {
+                        throw new IOException("SELinux 上下文校验未通过(镜像内文件缺 label), 已阻止交付");
+                    }
                     p.log("ext4 镜像已生成(权限/SELinux 已写入) → " + outImg.getAbsolutePath());
                     return;
                 } catch (Exception e) {
@@ -290,12 +294,39 @@ public final class Ext4Tool {
                 || m.contains("exceeds") || m.contains("extents") || m.contains("capacity");
     }
 
-    /** 抽查 ext4 根 inode 的 security.selinux, 防止生成看似成功但实际全为 unlabeled 的镜像。 */
-    private static boolean verifySelinux(File img, ToolPaths tools) {
+    /** 抽查 ext4 内 SELinux 上下文: 根 + 源目录里最多 3 个真实子文件的镜像路径都必须带 label。
+     *  只查根会漏判(根必中 '/' 规则而子文件全 unlabeled → 刷入卡第一屏), 必须抽查深层文件。 */
+    private static boolean verifySelinux(File img, ToolPaths tools, File srcDir, String mount) {
         try {
-            String out = Exec.capture(tools.libDir, Exec.cmd(
-                    tools.debugfs.getAbsolutePath(), "-R", "stat /", img.getAbsolutePath()));
-            return out != null && out.contains("security.selinux") && out.contains("u:");
+            List<String> checks = new ArrayList<>();
+            checks.add("/");
+            File[] top = srcDir.listFiles();
+            int picked = 0;
+            if (top != null) {
+                for (File f : top) {
+                    if (picked >= 3) break;
+                    String rel;
+                    if (f.isDirectory()) {
+                        File[] inner = f.listFiles();
+                        if (inner == null || inner.length == 0) continue;
+                        rel = "/" + f.getName() + "/" + inner[0].getName();
+                    } else {
+                        rel = "/" + f.getName();
+                    }
+                    checks.add(rel);
+                    picked++;
+                }
+            }
+            for (String path : checks) {
+                String imgPath = "/".equals(path) ? "/" : mount + path;
+                String out = Exec.capture(tools.libDir, Exec.cmd(
+                        tools.debugfs.getAbsolutePath(), "-R", "stat " + imgPath,
+                        img.getAbsolutePath()));
+                if (out == null || !out.contains("security.selinux") || !out.contains("u:")) {
+                    return false;
+                }
+            }
+            return true;
         } catch (Exception ignored) {
             return false;
         }
