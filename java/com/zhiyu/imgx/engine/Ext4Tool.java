@@ -151,7 +151,23 @@ public final class Ext4Tool {
         }
 
         try {
-            packInner(contentSrc, outImg, label, tools, p, mkeFs, mkeCtx, workDir, mount);
+            // /sdcard(FUSE) 对单个大文件写到 4~6GB 之后返回 EFBIG("File too large"),
+            // 导致 mke2fs/make_ext4fs 在镜像尾部写零/建日志时直接失败。
+            // 对策: 先在 App 私有目录(f2fs, 无 FUSE 限制)生成镜像, 成功后流式拷到用户目标路径。
+            File stagingDir = new File(tools.libDir.getParentFile(), "packtmp");
+            if (!stagingDir.exists()) stagingDir.mkdirs();
+            File buildTarget = outImg;
+            boolean staged = false;
+            if (stagingDir.isDirectory() && stagingDir.canWrite()) {
+                buildTarget = new File(stagingDir, "build_" + System.currentTimeMillis() + ".img");
+                staged = true;
+            }
+            try {
+                packInner(contentSrc, buildTarget, label, tools, p, mkeFs, mkeCtx, workDir, mount);
+                if (staged) ImgxEngine.deliver(buildTarget, outImg, p);
+            } finally {
+                if (staged && buildTarget.exists()) buildTarget.delete();
+            }
         } finally {
             // 3. 还原源目录 + 清理工作目录
             for (File dst : stashed) {

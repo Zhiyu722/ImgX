@@ -280,30 +280,60 @@ public final class ImgxEngine {
             throws IOException {
         p.log("══ 打包: " + srcDir.getName() + " → sparse ══");
         File raw = File.createTempFile("imgx_raw", ".img");
+        File staged = stagedTarget(tools);
         try {
             Ext4Tool.pack(srcDir, raw, label, tools, p);   // 1) 目录 → ext4 raw
             if (tools.img2simg.exists()) {                 // 2) raw → sparse (TIK 工具优先)
                 p.log("调用 img2simg 转换 sparse ...");
                 List<String> cmd = Exec.cmd(tools.img2simg.getAbsolutePath(),
-                        raw.getAbsolutePath(), outSparse.getAbsolutePath(), "4096");
+                        raw.getAbsolutePath(), staged.getAbsolutePath(), "4096");
                 int code = Exec.run(tools.libDir, p, cmd);
                 if (code != 0) throw new IOException("img2simg 失败 (exit " + code + ")");
             } else {
                 p.log("img2simg 不存在, 使用内置 sparse 打包器");
-                SparseImage.fromRaw(raw, outSparse, p);
+                SparseImage.fromRaw(raw, staged, p);
             }
+            deliver(staged, outSparse, p);
             p.log("已生成 sparse: " + outSparse.getName() + " (" + (outSparse.length() / 1048576) + " MB)");
             p.done(true, "打包完成 → " + outSparse.getAbsolutePath());
         } finally {
             raw.delete();
+            staged.delete();
         }
+    }
+
+    /** 暂存目标: 大文件先写在 App 私有目录(f2fs), 避开 /sdcard(FUSE) 对超大单文件的写入限制(EFBIG) */
+    private static File stagedTarget(ToolPaths tools) throws IOException {
+        File dir = new File(tools.libDir.getParentFile(), "packtmp");
+        if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("无法创建暂存目录: " + dir);
+        return new File(dir, "stage_" + System.currentTimeMillis() + ".img");
+    }
+
+    /** 暂存文件 → 用户目标路径(流式拷贝, 带进度日志) */
+    static void deliver(File staged, File out, Progress p) throws IOException {
+        if (staged == null || !staged.isFile() || staged.length() == 0)
+            throw new IOException("生成的镜像为空或缺失");
+        File parent = out.getParentFile();
+        if (parent != null && !parent.exists()) parent.mkdirs();
+        p.log("正在复制镜像到目标路径(大文件可能需数十秒) ...");
+        try (java.io.InputStream in = new java.io.FileInputStream(staged);
+             java.io.OutputStream os = new java.io.FileOutputStream(out)) {
+            Io.copy(in, os, p, staged.length());
+        }
+        p.log("已复制到目标: " + out.getAbsolutePath() + " (" + (out.length() / 1048576) + " MB)");
     }
 
     /** 目录 → erofs 镜像 (TIK mkfs.erofs) */
     public static void packErofs(File srcDir, File outImg, String label, ToolPaths tools, Progress p)
             throws IOException {
         p.log("══ 打包: " + srcDir.getName() + " → erofs ══");
-        ErofsTool.pack(srcDir, outImg, label, tools, p);
+        File staged = stagedTarget(tools);
+        try {
+            ErofsTool.pack(srcDir, staged, label, tools, p);
+            deliver(staged, outImg, p);
+        } finally {
+            staged.delete();
+        }
         p.done(true, "打包完成 → " + outImg.getAbsolutePath());
     }
 
